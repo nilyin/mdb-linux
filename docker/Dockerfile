@@ -1,4 +1,6 @@
 # MDV service Dockerfile
+# build example from repo root folder:
+# docker build -t nilyin/medveddb:1.21-debian11 -f ./docker/Dockerfile .
 # run example:
 # docker run -d -p 4800:4800 -v /opt/data:/opt/data:rw  --restart=unless-stopped --name=mdb [IMAGE_ID]
 
@@ -20,7 +22,7 @@ WORKDIR /opt/medveddb
 
 LABEL version="1.2"
 
-COPY medved medved.conf ./
+COPY ./build/mdv_service/medved ./build/mdv_client/mdv ./docker/medved.conf ./
 
 # change to the user, created by installing the package medveddb
 RUN chown -R medved:medved /opt
@@ -29,8 +31,8 @@ USER medved
 # Espose default MDV port
 EXPOSE 4800
 
-# Add VOLUMEs to allow backup of config, logs and databases
-VOLUME ["/opt/data"]
+# optionally add VOLUME to allow to persist database data. We skip it to avoid of anonymous volume creation
+# VOLUME ["/opt/data"]
 
 # Finally launch medveddb service.
 ENTRYPOINT ["/opt/medveddb/medved", "--cfg=/opt/medveddb/medved.conf"]
