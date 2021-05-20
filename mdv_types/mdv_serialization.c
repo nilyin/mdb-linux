@@ -168,17 +168,9 @@ bool mdv_binn_table_desc(mdv_table_desc const *table, binn *obj)
         return false;
     }
 
-    // Calculate size
-    uint32_t size = sizeof(mdv_table_desc) + table->size * sizeof(mdv_field);
-    size += strlen(table->name) + 1;
-
-    for(uint32_t i = 0; i < table->size; ++i)
-        size += strlen(table->fields[i].name) + 1;
-
     if (0
         || !binn_object_set_str(obj, "N", (char*)table->name)
-        || !binn_object_set_uint32(obj, "S", table->size)
-        || !binn_object_set_uint32(obj, "B", size))
+        || !binn_object_set_uint32(obj, "S", table->size))
     {
         MDV_LOGE("binn_table_desc failed");
         binn_free(obj);
@@ -224,23 +216,44 @@ bool mdv_binn_table_desc(mdv_table_desc const *table, binn *obj)
 
 mdv_table_desc * mdv_unbinn_table_desc(binn const *obj)
 {
-    uint32_t size = 0;
     char *name = 0;
     uint32_t fields_count = 0;
 
+    binn *binn_fields = 0;
+
     if (0
-        || !binn_object_get_uint32((void*)obj, "B", &size)
         || !binn_object_get_str((void*)obj, "N", &name)
         || !binn_object_get_uint32((void*)obj, "S", &fields_count)
-        )
+        || !binn_object_get_list((void*)obj, "F", (void**)&binn_fields))
     {
         MDV_LOGE("unbinn_table_desc failed");
         return 0;
     }
 
-    size += sizeof(void*) * (2 + fields_count);
+    size_t const table_name_size = strlen(name) + 1;
 
-    mdv_table_desc *table = mdv_alloc(size, "table_desc");
+    binn_iter iter = {};
+    binn value = {};
+
+    // Calculate size
+    uint32_t size = sizeof(mdv_table_desc) + fields_count * sizeof(mdv_field)
+                    + table_name_size;
+
+    binn_list_foreach(binn_fields, value)
+    {
+        char *field_name = 0;
+
+        if (!binn_object_get_str(&value, "N", &field_name))
+        {
+            MDV_LOGE("unbinn_table_desc failed");
+            return 0;
+        }
+
+        size += strlen(field_name) + 1;
+    }
+
+    // Allocate memory for table desc
+    mdv_table_desc *table = mdv_alloc(size);
 
     if (!table)
     {
@@ -256,22 +269,10 @@ mdv_table_desc * mdv_unbinn_table_desc(binn const *obj)
 
     char *buff = (char *)(fields + table->size);
 
-    size_t const table_name_size = strlen(name) + 1;
     memcpy(buff, name, table_name_size);
     table->name = buff;
     buff += table_name_size;
 
-    binn *binn_fields = 0;
-
-    if (!binn_object_get_list((void*)obj, "F", (void**)&binn_fields))
-    {
-        MDV_LOGE("unbinn_table_desc failed");
-        mdv_free(table, "table_desc");
-        return 0;
-    }
-
-    binn_iter iter = {};
-    binn value = {};
     size_t i = 0;
 
     binn_list_foreach(binn_fields, value)
@@ -279,7 +280,7 @@ mdv_table_desc * mdv_unbinn_table_desc(binn const *obj)
         if (i > table->size)
         {
             MDV_LOGE("unbinn_table_desc failed");
-            mdv_free(table, "table_desc");
+            mdv_free(table);
             return 0;
         }
 
@@ -291,7 +292,7 @@ mdv_table_desc * mdv_unbinn_table_desc(binn const *obj)
             || !binn_object_get_str(&value, "N", &field_name))
         {
             MDV_LOGE("unbinn_table_desc failed");
-            mdv_free(table, "table_desc");
+            mdv_free(table);
             return 0;
         }
 
@@ -303,7 +304,7 @@ mdv_table_desc * mdv_unbinn_table_desc(binn const *obj)
         ++i;
     }
 
-    if (buff - (char*)table > size)
+    if (buff - (char*)table != size)
         MDV_LOGE("memory corrupted: %p, %zu != %u", table, buff - (char*)table, size);
 
     assert(buff - (char*)table <= size);
@@ -371,7 +372,7 @@ mdv_table * mdv_unbinn_table(binn const *obj)
 
     mdv_table *table = mdv_table_create(&id, desc);
 
-    mdv_free(desc, "table_desc");
+    mdv_free(desc);
 
     if (!table)
     {
@@ -459,7 +460,7 @@ mdv_rowlist_entry * mdv_unbinn_table_as_row_slice(binn const        *obj,
                 + sizeof(mdv_data) * fields_num;
 
     // Memory allocation for new row
-    mdv_rowlist_entry *entry = mdv_alloc(row_size, "rowlist_entry");
+    mdv_rowlist_entry *entry = mdv_alloc(row_size);
 
     if (!entry)
     {
@@ -679,7 +680,7 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         return 0;
 
     // Memory allocation for new row
-    mdv_rowlist_entry *entry = mdv_alloc(row_size, "rowlist_entry");
+    mdv_rowlist_entry *entry = mdv_alloc(row_size);
 
     if (!entry)
     {
@@ -712,7 +713,7 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
             if (!binn_get(&value, fields[n].type, dataspace))
             {
                 MDV_LOGE("unbinn_table failed");
-                mdv_free(entry, "rowlist_entry");
+                mdv_free(entry);
                 return 0;
             }
 
@@ -743,7 +744,7 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
                 if (!binn_get(&arr_value, fields[n].type, dataspace))
                 {
                     MDV_LOGE("unbinn_table failed");
-                    mdv_free(row, "row");
+                    mdv_free(row);
                     return 0;
                 }
 
@@ -964,8 +965,8 @@ bool mdv_topology_serialize(mdv_topology *topology, binn *obj)
         || !binn_object_set_uint64(obj, "NC", mdv_vector_size(toponodes))
         || !binn_object_set_uint64(obj, "LC", mdv_vector_size(topolinks))
         || !binn_object_set_uint64(obj, "ES", mdv_vector_size(topoextradata))
-        || !binn_object_set_list(obj, "N", &nodes)
-        || !binn_object_set_list(obj, "L", &links))
+        || (mdv_vector_empty(toponodes) ? false : !binn_object_set_list(obj, "N", &nodes))
+        || (mdv_vector_empty(topolinks) ? false : !binn_object_set_list(obj, "L", &links)))
     {
         MDV_LOGE("binn_topology failed");
         mdv_rollback(rollbacker);
@@ -997,8 +998,8 @@ mdv_topology * mdv_topology_deserialize(binn const *obj)
         || !binn_object_get_uint64((void*)obj, "NC", &nodes_count)
         || !binn_object_get_uint64((void*)obj, "LC", &links_count)
         || !binn_object_get_uint64((void*)obj, "ES", &extradata_size)
-        || !binn_object_get_list((void*)obj, "N", (void**)&nodes)
-        || !binn_object_get_list((void*)obj, "L", (void**)&links))
+        || (nodes_count && !binn_object_get_list((void*)obj, "N", (void**)&nodes))
+        || (links_count && !binn_object_get_list((void*)obj, "L", (void**)&links)))
     {
         MDV_LOGE("unbinn_topology failed");
         return 0;
@@ -1051,62 +1052,68 @@ mdv_topology * mdv_topology_deserialize(binn const *obj)
     size_t i;
 
     // load nodes
-    i = 0;
-    binn_list_foreach(nodes, value)
+    if (nodes_count)
     {
-        if (i++ > nodes_count)
+        i = 0;
+        binn_list_foreach(nodes, value)
         {
-            MDV_LOGE("unbinn_topology failed");
-            mdv_rollback(rollbacker);
-            return 0;
+            if (i++ > nodes_count)
+            {
+                MDV_LOGE("unbinn_topology failed");
+                mdv_rollback(rollbacker);
+                return 0;
+            }
+
+            mdv_toponode node;
+
+            char *addr = 0;
+
+            if (0
+                || !binn_object_get_uint32(&value, "ID", &node.id)
+                || !binn_object_get_uint64(&value, "U1", (uint64*)&node.uuid.u64[0])
+                || !binn_object_get_uint64(&value, "U2", (uint64*)&node.uuid.u64[1])
+                || !binn_object_get_str(&value, "A", &addr))
+            {
+                MDV_LOGE("unbinn_topology failed");
+                mdv_rollback(rollbacker);
+                return 0;
+            }
+
+            node.addr = mdv_vector_append(extradata, addr, strlen(addr) + 1);
+
+            mdv_vector_push_back(toponodes, &node);
         }
-
-        mdv_toponode node;
-
-        char *addr = 0;
-
-        if (0
-            || !binn_object_get_uint32(&value, "ID", &node.id)
-            || !binn_object_get_uint64(&value, "U1", (uint64*)&node.uuid.u64[0])
-            || !binn_object_get_uint64(&value, "U2", (uint64*)&node.uuid.u64[1])
-            || !binn_object_get_str(&value, "A", &addr))
-        {
-            MDV_LOGE("unbinn_topology failed");
-            mdv_rollback(rollbacker);
-            return 0;
-        }
-
-        node.addr = mdv_vector_append(extradata, addr, strlen(addr) + 1);
-
-        mdv_vector_push_back(toponodes, &node);
     }
 
     // load links
-    i = 0;
-    binn_list_foreach(links, value)
+    if (links_count)
     {
-        if (i++ > links_count)
+        i = 0;
+        binn_list_foreach(links, value)
         {
-            MDV_LOGE("unbinn_topology failed");
-            mdv_rollback(rollbacker);
-            return 0;
+            if (i++ > links_count)
+            {
+                MDV_LOGE("unbinn_topology failed");
+                mdv_rollback(rollbacker);
+                return 0;
+            }
+
+            mdv_topolink link;
+
+            if (0
+                || !binn_object_get_uint32(&value, "U1", link.node + 0)
+                || !binn_object_get_uint32(&value, "U2", link.node + 1)
+                || !binn_object_get_uint32(&value, "W", &link.weight)
+                || link.node[0] >= nodes_count
+                || link.node[1] >= nodes_count)
+            {
+                MDV_LOGE("unbinn_topology failed");
+                mdv_rollback(rollbacker);
+                return 0;
+            }
+
+            mdv_vector_push_back(topolinks, &link);
         }
-
-        mdv_topolink link;
-
-        if (0
-            || !binn_object_get_uint32(&value, "U1", link.node + 0)
-            || !binn_object_get_uint32(&value, "U2", link.node + 1)
-            || !binn_object_get_uint32(&value, "W", &link.weight)
-            || link.node[0] >= nodes_count
-            || link.node[1] >= nodes_count)
-        {
-            MDV_LOGE("unbinn_topology failed");
-            mdv_rollback(rollbacker);
-            return 0;
-        }
-
-        mdv_vector_push_back(topolinks, &link);
     }
 
     mdv_topology *topology = mdv_topology_create(toponodes, topolinks, extradata);

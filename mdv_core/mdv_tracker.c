@@ -33,7 +33,7 @@ struct mdv_tracker
     atomic_uint_fast32_t    rc;             ///< References counter
     mdv_uuid                uuid;           ///< Global unique identifier for current node (i.e. self UUID)
     atomic_uint             max_id;         ///< Maximum node identifier
-    mdv_storage            *storage;        ///< Nodes storage
+    mdv_lmdb               *storage;        ///< Nodes storage
     mdv_ebus               *ebus;           ///< Events bus
 
     mdv_mutex               nodes_mutex;    ///< nodes guard mutex
@@ -455,12 +455,9 @@ static mdv_errno mdv_tracker_topology_broadcast(
                                 mdv_topology   *diff,
                                 mdv_hashmap    *peers)
 {
-    mdv_hashmap *dst = _mdv_hashmap_create(
-                                1,
-                                0,
-                                sizeof(mdv_uuid),
-                                (mdv_hash_fn)mdv_uuid_hash,
-                                (mdv_key_cmp_fn)mdv_uuid_cmp);
+    mdv_hashmap *dst = mdv_hashset_create(mdv_uuid, 1,
+                                          mdv_uuid_hash,
+                                          mdv_uuid_cmp);
 
     if (!dst)
     {
@@ -744,12 +741,12 @@ static const mdv_event_handler_type mdv_tracker_handlers[] =
 
 
 mdv_tracker * mdv_tracker_create(mdv_uuid const *uuid,
-                                 mdv_storage    *storage,
+                                 mdv_lmdb       *storage,
                                  mdv_ebus       *ebus)
 {
     mdv_rollbacker *rollbacker = mdv_rollbacker_create(8);
 
-    mdv_tracker *tracker = mdv_alloc(sizeof(mdv_tracker), "tracker");
+    mdv_tracker *tracker = mdv_alloc(sizeof(mdv_tracker));
 
     if (!tracker)
     {
@@ -758,7 +755,7 @@ mdv_tracker * mdv_tracker_create(mdv_uuid const *uuid,
         return 0;
     }
 
-    mdv_rollbacker_push(rollbacker, mdv_free, tracker, "tracker");
+    mdv_rollbacker_push(rollbacker, mdv_free, tracker);
 
     atomic_init(&tracker->rc, 1);
     atomic_init(&tracker->max_id, 0);
@@ -879,7 +876,7 @@ static void mdv_tracker_free(mdv_tracker *tracker)
 
     memset(tracker, 0, sizeof *tracker);
 
-    mdv_free(tracker, "tracker");
+    mdv_free(tracker);
 }
 
 

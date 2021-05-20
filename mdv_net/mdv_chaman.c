@@ -166,7 +166,7 @@ mdv_chaman * mdv_chaman_create(mdv_chaman_config const *config)
     mdv_rollbacker *rollbacker = mdv_rollbacker_create(6);
 
     // Allocate memory
-    mdv_chaman *chaman = mdv_alloc(sizeof(mdv_chaman), "chaman");
+    mdv_chaman *chaman = mdv_alloc(sizeof(mdv_chaman));
 
     if(!chaman)
     {
@@ -179,7 +179,7 @@ mdv_chaman * mdv_chaman_create(mdv_chaman_config const *config)
 
     chaman->config = *config;
 
-    mdv_rollbacker_push(rollbacker, mdv_free, chaman, "chaman");
+    mdv_rollbacker_push(rollbacker, mdv_free, chaman);
 
     // Create mutex for dialers guard
     if (mdv_mutex_create(&chaman->mutex) != MDV_OK)
@@ -327,7 +327,7 @@ void mdv_chaman_free(mdv_chaman *chaman)
         mdv_hashmap_release(chaman->channels);
 
         // Free chaman
-        mdv_free(chaman, "chaman");
+        mdv_free(chaman);
     }
 }
 
@@ -601,7 +601,7 @@ static mdv_errno mdv_chaman_selector_reg(mdv_chaman         *chaman,
     {
         .fd = fd,
         .fn = mdv_chaman_select_handler,
-        .context_size = sizeof(mdv_selector_task),
+        .context_size = sizeof(mdv_selector_context),
         .context =
         {
             .type = MDV_CT_SELECTOR,

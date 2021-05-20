@@ -1,14 +1,10 @@
 #include "mdv_topology.h"
 #include "mdv_hashmap.h"
 #include "mdv_rollbacker.h"
-#include "mdv_algorithm.h"
+#include <mdv_algorithm.h>
 #include "mdv_log.h"
 #include <string.h>
-#include <stdlib.h>
 #include <stdatomic.h>
-
-
-typedef int (*mdv_qsort_comparer) (const void *, const void *);
 
 
 /// Topology description
@@ -64,7 +60,7 @@ static mdv_vector * mdv_topology_linked_nodes(mdv_vector *topolinks, mdv_vector 
                                  sizeof(mdv_toponode),
                                  &mdv_default_allocator);
 
-    uint32_t *node_idxs = mdv_alloc(sizeof(uint32_t) * mdv_vector_size(toponodes), "node_idxs");
+    uint32_t *node_idxs = mdv_alloc(sizeof(uint32_t) * mdv_vector_size(toponodes));
 
     if (!node_idxs)
         return 0;
@@ -95,7 +91,7 @@ static mdv_vector * mdv_topology_linked_nodes(mdv_vector *topolinks, mdv_vector 
 
     if (!linked_nodes)
     {
-        mdv_free(node_idxs, "node_idxs");
+        mdv_free(node_idxs);
         return 0;
     }
 
@@ -118,7 +114,7 @@ static mdv_vector * mdv_topology_linked_nodes(mdv_vector *topolinks, mdv_vector 
         link->node[1] = node_idxs[link->node[1]];
     }
 
-    mdv_free(node_idxs, "node_idxs");
+    mdv_free(node_idxs);
 
     return linked_nodes;
 }
@@ -468,7 +464,7 @@ mdv_topology * mdv_topology_create(mdv_vector *nodes,
                                    mdv_vector *links,
                                    mdv_vector *extradata)
 {
-    mdv_topology *topology = mdv_alloc(sizeof(mdv_topology), "topology");
+    mdv_topology *topology = mdv_alloc(sizeof(mdv_topology));
 
     if (!topology)
     {
@@ -481,7 +477,7 @@ mdv_topology * mdv_topology_create(mdv_vector *nodes,
     if (!node_idxs)
     {
         MDV_LOGE("No memory for network topology");
-        mdv_free(topology, "topology");
+        mdv_free(topology);
         return 0;
     }
 
@@ -495,10 +491,10 @@ mdv_topology * mdv_topology_create(mdv_vector *nodes,
         link->node[1] = node1->id;
     }
 
-    qsort(mdv_vector_data(nodes),
-          mdv_vector_size(nodes),
-          sizeof(mdv_toponode),
-          (mdv_qsort_comparer)mdv_node_cmp);
+    mdv_qsort(mdv_vector_data(nodes),
+              mdv_vector_size(nodes),
+              sizeof(mdv_toponode),
+              (mdv_cmp_fn)mdv_node_cmp);
 
     // restore linked node indices
 
@@ -540,7 +536,7 @@ static void mdv_topology_free(mdv_topology *topology)
         mdv_vector_release(topology->nodes);
         mdv_vector_release(topology->links);
         mdv_vector_release(topology->extradata);
-        mdv_free(topology, "topology");
+        mdv_free(topology);
     }
 }
 
@@ -591,12 +587,9 @@ mdv_vector * mdv_topology_extradata(mdv_topology *topology)
 
 mdv_hashmap * mdv_topology_peers(mdv_topology *topology, mdv_uuid const *node)
 {
-    mdv_hashmap *peers = _mdv_hashmap_create(
-                                4,
-                                0,
-                                sizeof(mdv_uuid),
-                                (mdv_hash_fn)mdv_uuid_hash,
-                                (mdv_key_cmp_fn)mdv_uuid_cmp);
+    mdv_hashmap *peers = mdv_hashset_create(mdv_uuid, 4,
+                                            mdv_uuid_hash,
+                                            mdv_uuid_cmp);
 
     if (peers)
     {

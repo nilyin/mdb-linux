@@ -14,7 +14,7 @@ mdv_table_desc * mdv_table_desc_create(char const *name)
                                 + sizeof(mdv_vector*)
                                 + sizeof(mdv_list);
 
-    mdv_table_desc *desc = mdv_alloc(desc_size, "table_desc");
+    mdv_table_desc *desc = mdv_alloc(desc_size);
 
     if(!desc)
     {
@@ -23,7 +23,7 @@ mdv_table_desc * mdv_table_desc_create(char const *name)
         return 0;
     }
 
-    mdv_rollbacker_push(rollbacker, mdv_free, desc, "table_desc");
+    mdv_rollbacker_push(rollbacker, mdv_free, desc);
 
     memset(desc, 0, desc_size);
 
@@ -42,7 +42,7 @@ mdv_table_desc * mdv_table_desc_create(char const *name)
 
     mdv_list *strings = (mdv_list *)(ppfields + 1);
 
-    mdv_list_entry_base *tbl_name = mdv_list_push_back_ptr(strings, name, strlen(name) + 1);
+    mdv_list_entry_base *tbl_name = mdv_list_push_back_data(strings, name, strlen(name) + 1);
 
     if(!tbl_name)
     {
@@ -70,7 +70,7 @@ void mdv_table_desc_free(mdv_table_desc *desc)
         mdv_list *strings = (mdv_list *)(ppfields + 1);
         mdv_vector_release(*ppfields);
         mdv_list_clear(strings);
-        mdv_free(desc, "table_desc");
+        mdv_free(desc);
     }
 }
 
@@ -94,7 +94,7 @@ bool mdv_table_desc_append(mdv_table_desc *desc, mdv_field const *field)
         return false;
     }
 
-    mdv_list_entry_base *name = mdv_list_push_back_ptr(strings, field->name, strlen(field->name) + 1);
+    mdv_list_entry_base *name = mdv_list_push_back_data(strings, field->name, strlen(field->name) + 1);
 
     if(!name)
     {
