@@ -1,0 +1,46 @@
+#MDV service Dockerfile
+# Referenced mostly from https://debian-administration.org/article/698/Automating_the_creation_of_docker_images
+
+FROM debian:buster-20200607-slim
+LABEL MAINTAINER="Nikolay ILYIN <ni@peerf.me>"
+LABEL name="mdv"
+
+RUN apt-get update -q -q \
+&& apt-get upgrade --yes --force-yes \
+&& apt-get install -yq --no-install-recommends \
+sudo less net-tools runit \
+&& apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/
+
+#RUN useradd -rms /bin/bash -g root -G sudo peerf
+
+COPY medveddb_1.0.0.deb .
+RUN apt install -yq ./medveddb_1.0.0.deb
+LABEL version="1.0"
+RUN chown -R medved:medved ./
+USER medved
+
+# Espose default MDV port
+EXPOSE 4800
+
+#
+#  Now make sure that runit will launch SSHD, via runit.
+#
+#  NOTE: Remember runit will launch /etc/service/sshd/run
+#
+RUN mkdir /etc/service/mdv
+RUN /bin/echo -e '#!/bin/sh' > /etc/service/mdv/run
+RUN /bin/echo -e 'exec /usr/sbin/mdv -D' >> /etc/service/mdv/run
+
+#
+#  Make sure our run-script is executable.
+#
+RUN chown medved.medved /etc/service/mdv/run
+RUN chmod 755 /etc/service/mdv/run
+
+
+#
+# Finally launch runit.
+#
+ENTRYPOINT ["/usr/sbin/runsvdir-start"]
