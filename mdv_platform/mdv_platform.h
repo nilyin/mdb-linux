@@ -1,4 +1,5 @@
 #pragma once
+#include "../mdv_types/mdv_objid.h"
 
 #if defined(_AIX)
     #define MDV_PLATFORM_IBM_AIX                        // IBM AIX
