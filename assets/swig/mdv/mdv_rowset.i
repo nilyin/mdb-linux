@@ -22,8 +22,18 @@ typedef struct
 
 %nodefault;
 typedef struct {} mdv_rowset;
-typedef struct {} mdv_rows_enumerator;
 %clearnodefault;
+
+%nodefaultctor mdv_rows_enumerator;
+%nodefaultdtor mdv_rows_enumerator;
+
+%feature("director:destructor") mdv_rows_enumerator "public synchronized void close()";
+%typemap(javaimports) mdv_rows_enumerator %{
+import java.util.Iterator;
+%}
+%typemap(javainterfaces) mdv_rows_enumerator "implements Iterator<Row>, AutoCloseable";
+
+typedef struct {} mdv_rows_enumerator;
 
 %newobject mdv_rowset::get_enumerator;
 
@@ -98,11 +108,29 @@ typedef struct {} mdv_rows_enumerator;
 
 %extend mdv_rows_enumerator
 {
-    ~mdv_rows_enumerator()
+    void close()
     {
-        mdv_table_release($self->table);
-        mdv_enumerator_release($self->enumerator);
-        mdv_free($self);
+        if ($self)
+        {
+            mdv_table_release($self->table);
+            mdv_enumerator_release($self->enumerator);
+            mdv_free($self);
+        }
+    }
+
+    boolean hasNext()
+    {
+        return $self && $self->enumerator != NULL && mdv_enumerator_next($self->enumerator) == MDV_OK;
+    }
+
+    mdv_datums * next()
+    {
+        return current();
+    }
+
+    void remove()
+    {
+        throw new UnsupportedOperationException();
     }
 
     bool reset()
@@ -110,7 +138,7 @@ typedef struct {} mdv_rows_enumerator;
         return mdv_enumerator_reset($self->enumerator) == MDV_OK;
     }
 
-    bool next()
+    bool moveNext()
     {
         return mdv_enumerator_next($self->enumerator) == MDV_OK;
     }
