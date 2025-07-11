@@ -1,0 +1,3 @@
+C89 is main programming, AES for encryption, key-value storage model with extensible backend support (currently LMDB). A multiple language binding uses SWIG and JDK packages for BUILD_JNI option in CMakeLists.txt to output JNI library and Java JAR file into build/mdv_bindings/mdv/java folder.
+
+The sulution can be integrated in Linux or Android application as a service library or it can be run as a stanalone network server on Linux as Debian / RPM backage or by using Docker container
