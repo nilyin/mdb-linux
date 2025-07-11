@@ -21,6 +21,7 @@ typedef struct
     mdv_enumerator          base;       ///< Base type for rowset enumerator
     mdv_rowset_impl        *rowset;     ///< Set of rows
     mdv_rowlist_entry      *current;    ///< Current row
+    mdv_objid               row_id;     ///< Current row identifier
 } mdv_rowset_enumerator_impl;
 
 
@@ -68,7 +69,7 @@ static mdv_table * mdv_rowset_impl_table(mdv_rowset *rowset)
 }
 
 
-static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
+static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count)
 {
     mdv_rowset_impl *impl = (mdv_rowset_impl *)rowset;
     mdv_table_desc const *desc = mdv_table_description(impl->table);
@@ -96,6 +97,8 @@ static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_data const **rows, 
             MDV_LOGE("No memory for new row");
             return appended;
         }
+
+        entry->row_id = row_ids[i];
 
         char *dataspace = (char *)(entry->data.fields + cols);
 
@@ -169,7 +172,10 @@ static mdv_errno mdv_rowset_enumerator_impl_next(mdv_enumerator *enumerator)
     if (!impl->current)
         impl->current = (mdv_rowlist_entry*)rows->next;
     else
-        impl->current = (mdv_rowlist_entry*)impl->current->next;
+        impl->current = (mdv_rowlist_entry*)impl->current->base.next;
+
+    if (impl->current)
+        impl->row_id = impl->current->row_id;
 
     return impl->current ? MDV_OK : MDV_FAILED;
 }
@@ -179,6 +185,13 @@ static void * mdv_rowset_enumerator_impl_current(mdv_enumerator *enumerator)
 {
     mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
     return impl->current ? &impl->current->data : 0;
+}
+
+
+static mdv_objid const * mdv_rowset_enumerator_impl_row_id(mdv_enumerator *enumerator)
+{
+    mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    return &impl->row_id;
 }
 
 
@@ -200,7 +213,8 @@ static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset *rowset)
         .release = mdv_rowset_enumerator_impl_release,
         .reset = mdv_rowset_enumerator_impl_reset,
         .next = mdv_rowset_enumerator_impl_next,
-        .current = mdv_rowset_enumerator_impl_current
+        .current = mdv_rowset_enumerator_impl_current,
+        .row_id = mdv_rowset_enumerator_impl_row_id
     };
 
     enumerator->base.vptr = &vtbl;
@@ -271,9 +285,9 @@ mdv_table * mdv_rowset_table(mdv_rowset *rowset)
 }
 
 
-size_t mdv_rowset_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
+size_t mdv_rowset_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count)
 {
-    return rowset->vptr->append(rowset, rows, count);
+    return rowset->vptr->append(rowset, row_ids, rows, count);
 }
 
 

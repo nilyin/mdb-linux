@@ -116,7 +116,14 @@ mdv_message_def(rowset, 13,
 
 mdv_message_def(delete_from, 14,
     mdv_uuid    table;
-    char const *filter;
+    mdv_objid   row_id;
+);
+
+
+mdv_message_def(update, 15,
+    mdv_uuid    table;
+    mdv_objid   row_id;
+    mdv_rowset *rows;
 );
 
 char const *                mdv_msg_name                    (uint32_t id);
@@ -170,3 +177,7 @@ bool                        mdv_msg_rowset_unbinn           (binn const * obj, m
 
 bool                        mdv_msg_delete_from_binn        (mdv_msg_delete_from const *msg, binn *obj);
 bool                        mdv_msg_delete_from_unbinn      (binn const * obj, mdv_msg_delete_from *msg);
+
+
+bool                        mdv_msg_update_binn             (mdv_msg_update const *msg, binn *obj);
+bool                        mdv_msg_update_unbinn           (binn const * obj, mdv_msg_update *msg);

@@ -15,4 +15,5 @@ typedef struct mdv_kvdata
 {
     mdv_data key;           ///< Key
     mdv_data value;         ///< Value
+    mdv_objid row_id;       ///< row identifier
 } mdv_kvdata;

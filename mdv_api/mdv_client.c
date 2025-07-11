@@ -665,6 +665,111 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
 }
 
 
+mdv_errno mdv_delete(mdv_client *client, mdv_table *table, mdv_objid const *row_id)
+{
+    mdv_msg_delete_from delete_from =
+    {
+        .table = *mdv_table_uuid(table),
+        .row_id = *row_id
+    };
+
+    binn binn_msg;
+
+    if (!mdv_msg_delete_from_binn(&delete_from, &binn_msg))
+        return MDV_FAILED;
+
+    mdv_msg req =
+    {
+        .hdr =
+        {
+            .id = mdv_msg_delete_from_id,
+            .size = binn_size(&binn_msg)
+        },
+        .payload = binn_ptr(&binn_msg)
+    };
+
+    mdv_msg resp;
+
+    mdv_errno err = mdv_client_send(client, &req, &resp, client->response_timeout);
+
+    binn_free(&binn_msg);
+
+    if (err == MDV_OK)
+    {
+        switch(resp.hdr.id)
+        {
+            case mdv_message_id(status):
+            {
+                if (mdv_client_status_handler(&resp, &err) == MDV_OK)
+                    break;
+            }
+
+            default:
+                err = MDV_FAILED;
+                MDV_LOGE("Unexpected response");
+                break;
+        }
+
+        mdv_free_msg(&resp);
+    }
+
+    return err;
+}
+
+
+mdv_errno mdv_update(mdv_client *client, mdv_table *table, mdv_objid const *row_id, mdv_rowset *rowset)
+{
+    mdv_msg_update update =
+    {
+        .table = *mdv_table_uuid(table),
+        .row_id = *row_id,
+        .rows = rowset
+    };
+
+    binn binn_msg;
+
+    if (!mdv_msg_update_binn(&update, &binn_msg))
+        return MDV_FAILED;
+
+    mdv_msg req =
+    {
+        .hdr =
+        {
+            .id = mdv_msg_update_id,
+            .size = binn_size(&binn_msg)
+        },
+        .payload = binn_ptr(&binn_msg)
+    };
+
+    mdv_msg resp;
+
+    mdv_errno err = mdv_client_send(client, &req, &resp, client->response_timeout);
+
+    binn_free(&binn_msg);
+
+    if (err == MDV_OK)
+    {
+        switch(resp.hdr.id)
+        {
+            case mdv_message_id(status):
+            {
+                if (mdv_client_status_handler(&resp, &err) == MDV_OK)
+                    break;
+            }
+
+            default:
+                err = MDV_FAILED;
+                MDV_LOGE("Unexpected response");
+                break;
+        }
+
+        mdv_free_msg(&resp);
+    }
+
+    return err;
+}
+
+
 /// Set of rows
 typedef struct
 {

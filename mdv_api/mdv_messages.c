@@ -400,7 +400,7 @@ bool mdv_msg_delete_from_binn(mdv_msg_delete_from const *msg, binn *obj)
     if (0
         || !binn_object_set_uint64(obj, "T0", msg->table.u64[0])
         || !binn_object_set_uint64(obj, "T1", msg->table.u64[1])
-        || !binn_object_set_str(obj,    "F", (char*)msg->filter))
+        || !binn_object_set_blob(obj, "R", (void*)&msg->row_id, sizeof(msg->row_id)))
     {
         MDV_LOGE("mdv_msg_delete_from_binn failed");
         binn_free(obj);
@@ -413,16 +413,67 @@ bool mdv_msg_delete_from_binn(mdv_msg_delete_from const *msg, binn *obj)
 
 bool mdv_msg_delete_from_unbinn(binn const * obj, mdv_msg_delete_from *msg)
 {
-    binn *fields = 0;
+    if (0
+        || !binn_object_get_uint64((void*)obj, "T0", (uint64 *)(msg->table.u64 + 0))
+        || !binn_object_get_uint64((void*)obj, "T1", (uint64 *)(msg->table.u64 + 1))
+        || !binn_object_get_blob((void*)obj, "R", &msg->row_id, 0))
+    {
+        MDV_LOGE("unbinn_delete_from failed");
+        return false;
+    }
+
+    return true;
+}
+
+
+bool mdv_msg_update_binn(mdv_msg_update const *msg, binn *obj)
+{
+    binn rows;
+
+    if (!mdv_binn_rowset(msg->rows, &rows))
+        return false;
+
+    if (!binn_create_object(obj))
+    {
+        MDV_LOGE("mdv_msg_update_binn failed");
+        binn_free(&rows);
+        return false;
+    }
+
+    if (0
+        || !binn_object_set_uint64(obj, "T0", msg->table.u64[0])
+        || !binn_object_set_uint64(obj, "T1", msg->table.u64[1])
+        || !binn_object_set_blob(obj, "R", (void*)&msg->row_id, sizeof(msg->row_id))
+        || !binn_object_set_list(obj, "D", &rows))
+    {
+        MDV_LOGE("mdv_msg_update_binn failed");
+        binn_free(obj);
+        binn_free(&rows);
+        return false;
+    }
+
+    binn_free(&rows);
+
+    return true;
+}
+
+
+bool mdv_msg_update_unbinn(binn const * obj, mdv_msg_update *msg)
+{
+    binn const *rows = 0;
 
     if (0
         || !binn_object_get_uint64((void*)obj, "T0", (uint64 *)(msg->table.u64 + 0))
         || !binn_object_get_uint64((void*)obj, "T1", (uint64 *)(msg->table.u64 + 1))
-        || !binn_object_get_str((void*)obj,    "F", (char**)&msg->filter))
+        || !binn_object_get_blob((void*)obj, "R", &msg->row_id, 0)
+        || !binn_object_get_list(obj, "D", (void**)&rows))
     {
-        MDV_LOGE("mdv_msg_delete_from_unbinn failed");
+        MDV_LOGE("unbinn_update failed");
         return false;
     }
+
+    // TODO: implement rows unbinn
+    // msg->rows = mdv_unbinn_rowset(rows, 0);
 
     return true;
 }

@@ -104,6 +104,17 @@ typedef struct {} mdv_rows_enumerator;
     }
 }
 
+
+mdv_errno delete(mdv_client *client, mdv_objid const *row_id)
+{
+    return mdv_delete(client, mdv_rowset_table($self), row_id);
+}
+
+mdv_errno update(mdv_client *client, mdv_objid const *row_id, mdv_rowset *rowset)
+{
+    return mdv_update(client, mdv_rowset_table($self), row_id, rowset);
+}
+
 %newobject mdv_rows_enumerator::current;
 
 %extend mdv_rows_enumerator
@@ -166,5 +177,11 @@ typedef struct {} mdv_rows_enumerator;
         }
 
         return datums;
+    }
+
+    mdv_objid row_id()
+    {
+        mdv_objid const *id = mdv_enumerator_row_id($self->enumerator);
+        return *id;
     }
 }

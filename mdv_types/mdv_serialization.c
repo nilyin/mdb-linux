@@ -801,20 +801,23 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
     while(mdv_enumerator_next(enumerator) == MDV_OK)
     {
         mdv_row *row = mdv_enumerator_current(enumerator);
+        mdv_objid const *row_id = mdv_enumerator_row_id(enumerator);
 
         binn fields;
 
         if (mdv_binn_row(row, table_desc, &fields))
         {
-            if (!binn_list_add_list(list, &fields))
-            {
-                binn_free(&fields);
-                MDV_LOGE("binn_rowset failed");
-                mdv_rollback(rollbacker);
-                return false;
-            }
-
+            binn_list_add_list(list, &fields);
             binn_free(&fields);
+
+            if (row_id)
+            {
+                binn obj;
+                binn_create_object(&obj);
+                binn_object_set_blob(&obj, "id", (void*)row_id, sizeof(*row_id));
+                binn_list_add_object(list, &obj);
+                binn_free(&obj);
+            }
         }
         else
         {
@@ -856,6 +859,15 @@ mdv_rowset * mdv_unbinn_rowset(binn const *list, mdv_table *table)
             MDV_LOGE("unbinn_rowset failed");
             mdv_rowset_release(rowset);
             return 0;
+        }
+
+        if (binn_list_next(&iter, &value))
+        {
+            void *row_id = 0;
+            uint32_t size = 0;
+            binn_object_get_blob(&value, "id", &row_id, &size);
+            if (row_id && size == sizeof(mdv_objid))
+                entry->row_id = *(mdv_objid*)row_id;
         }
 
         mdv_rowset_emplace(rowset, entry);
