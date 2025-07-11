@@ -10,6 +10,7 @@
  */
 #pragma once
 #include "mdv_def.h"
+#include "../mdv_types/mdv_objid.h"
 #include <stdatomic.h>
 
 

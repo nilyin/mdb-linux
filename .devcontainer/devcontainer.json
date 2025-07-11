@@ -1,0 +1,14 @@
+{
+    "name": "MedvedDB Test Environment",
+    "image": "medveddb-test:latest",
+    "workspaceFolder": "/app",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools"
+            ]
+        }
+    },
+    "postCreateCommand": "chmod +x run_tests.sh && chmod +x run_platform_tests.sh"
+}

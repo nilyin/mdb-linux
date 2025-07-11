@@ -30,6 +30,6 @@ The system is composed of several distinct modules, each with a specific respons
 
 - **`CMakeLists.txt`**: The root build file defines how all modules are compiled and linked.
 - **`docker/`**: Contains Docker configurations for containerized deployment.
-- **`assets/`**: Contains assets for packaging, such as DEB package scripts and systemd service files.
+- **`assets/`**: Contains assets for packaging, such as DEB package scripts and systemd service files. It also has server configuration file: `assets/conf/medved.conf`
 
 This modular architecture allows for clear separation of concerns and facilitates maintenance and extension of the system.
