@@ -32,3 +32,34 @@ cd build
 cmake ..
 cmake --build .
 ```
+
+### Running Tests
+
+After building the project, you can run the C-language tests from the `build` directory:
+
+```
+./mdv_tests/mdv_tests
+```
+
+The output should show that all test suites pass. For example:
+
+```
+--[SUITE]-- platform
+--[RUNNING]-- platform: thread_pool
+--[PASSED]-- platform: thread_pool
+--[RUNNING]-- platform: ebus
+--[PASSED]-- platform: ebus
+...
+--[SUITE]-- crud
+--[RUNNING]-- crud: create_read_update_delete
+--[PASSED]-- crud: create_read_update_delete
+
+-=[SUITES]=-
+ PASSED: 5
+ FAILED: 0
+ TOTAL:  5
+-=[TESTS]=-
+ PASSED: 12
+ FAILED: 0
+ TOTAL:  12
+```

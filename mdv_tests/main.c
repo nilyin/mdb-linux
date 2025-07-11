@@ -4,6 +4,7 @@
 #include "mdv_core.h"
 #include "mdv_crypto.h"
 #include "mdv_storage.h"
+#include "mdv_crud.h"
 #include <mdv_log.h>
 
 
@@ -18,6 +19,7 @@ int main(int argc, char *argv[])
     MU_RUN_SUITE(types);
     MU_RUN_SUITE(crypto);
     MU_RUN_SUITE(storage);
+    MU_RUN_SUITE(crud);
     MU_REPORT();
 
     return minunit_status;
