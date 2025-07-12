@@ -14,7 +14,7 @@
 #include "mdv_row.h"
 #include "mdv_table.h"
 #include <mdv_def.h>
-#include <mdv_enumerator.h>
+typedef struct mdv_enumerator mdv_enumerator;
 #include <mdv_list.h>
 #include <stdatomic.h>
 

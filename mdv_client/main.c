@@ -331,7 +331,7 @@ static void mdv_test_scenario(char const *args)
 
     mdv_data const *rows[] = { row0, row1 };
 
-    if (mdv_rowset_append(rowset, rows, 2) != 2)
+    if (mdv_rowset_append(rowset, NULL, rows, 2) != 2)
     {
         MDV_INF("Rowset creation failed for table '%s'\n", desc.name);
         mdv_rowset_release(rowset);

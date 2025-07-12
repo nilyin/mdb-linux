@@ -14,6 +14,7 @@
 #include <mdv_serialization.h>
 #include <mdv_router.h>
 #include <mdv_safeptr.h>
+#include <mdv_enumerator.h>
 #include <signal.h>
 
 
@@ -992,9 +993,10 @@ static mdv_table * mdv_rowset_impl_table(mdv_rowset *rowset)
 }
 
 
-static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
+static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count)
 {
     (void)rowset;
+    (void)row_ids;
     (void)rows;
     (void)count;
     return MDV_NO_IMPL;

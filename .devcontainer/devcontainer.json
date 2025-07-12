@@ -1,6 +1,6 @@
 {
     "name": "MedvedDB Test Environment",
-    "image": "medveddb-test:latest",
+    "image": "mdv_dev:2025-01-11",
     "workspaceFolder": "/app",
     "customizations": {
         "vscode": {

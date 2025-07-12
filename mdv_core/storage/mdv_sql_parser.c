@@ -1,6 +1,6 @@
-#line 2 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
+#line 2 "/app/mdv_core/storage/mdv_sql_parser.c"
 
-#line 4 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
+#line 4 "/app/mdv_core/storage/mdv_sql_parser.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -445,11 +445,11 @@ int yy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *yytext;
-#line 1 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
-#line 2 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 1 "/app/mdv_core/storage/mdv_sql.l"
+#line 2 "/app/mdv_core/storage/mdv_sql.l"
 #include "mdv_sql_lexer.h"
-#line 452 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
-#line 453 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
+#line 452 "/app/mdv_core/storage/mdv_sql_parser.c"
+#line 453 "/app/mdv_core/storage/mdv_sql_parser.c"
 
 #define INITIAL 0
 
@@ -666,10 +666,10 @@ YY_DECL
 		}
 
 	{
-#line 5 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 5 "/app/mdv_core/storage/mdv_sql.l"
 
 
-#line 673 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
+#line 673 "/app/mdv_core/storage/mdv_sql_parser.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -728,14 +728,14 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 7 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 7 "/app/mdv_core/storage/mdv_sql.l"
 { //yylval.val = atol(yytext);
              return(NUMBER);
            }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 10 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 10 "/app/mdv_core/storage/mdv_sql.l"
 {
              //sscanf(yytext,"%f",&yylval.val);
              return(NUMBER);
@@ -743,58 +743,58 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 14 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 14 "/app/mdv_core/storage/mdv_sql.l"
 return(PLUS);
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 15 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 15 "/app/mdv_core/storage/mdv_sql.l"
 return(MINUS);
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 16 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 16 "/app/mdv_core/storage/mdv_sql.l"
 return(MULT);
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 17 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 17 "/app/mdv_core/storage/mdv_sql.l"
 return(DIV);
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 18 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 18 "/app/mdv_core/storage/mdv_sql.l"
 return(LB);
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 19 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 19 "/app/mdv_core/storage/mdv_sql.l"
 return(RB);
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 20 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 20 "/app/mdv_core/storage/mdv_sql.l"
 return(EOL);
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 21 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 21 "/app/mdv_core/storage/mdv_sql.l"
 /* throw away whitespace */
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 22 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 22 "/app/mdv_core/storage/mdv_sql.l"
 { //yyerror("Illegal character"); 
              return(EOL);
            }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 25 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 25 "/app/mdv_core/storage/mdv_sql.l"
 ECHO;
 	YY_BREAK
-#line 798 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_parser.c"
+#line 798 "/app/mdv_core/storage/mdv_sql_parser.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1799,7 +1799,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 25 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.l"
+#line 25 "/app/mdv_core/storage/mdv_sql.l"
 
 
 

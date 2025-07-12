@@ -2,6 +2,7 @@
 #include <mdv_log.h>
 #include <mdv_alloc.h>
 #include <mdv_rollbacker.h>
+#include <mdv_enumerator.h>
 #include <assert.h>
 #include <limits.h>
 

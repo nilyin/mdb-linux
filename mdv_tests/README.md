@@ -6,7 +6,7 @@ This directory contains the comprehensive test suite for MedvedDB C language com
 ## Container Configuration
 
 ### Docker Image
-- **Image**: `medveddb-test:latest`
+- **Image**: `mdv_dev:2025-01-11`
 - **Base OS**: Debian Bullseye Slim
 - **Build Tools**: GCC 10.2.1, CMake 3.18.4, Git
 - **Java**: OpenJDK 11.0.27
@@ -20,7 +20,7 @@ Located in `.devcontainer/devcontainer.json`:
 ```json
 {
     "name": "MedvedDB Test Environment",
-    "image": "medveddb-test:latest",
+    "image": "mdv_dev:2025-01-11",
     "workspaceFolder": "/app",
     "customizations": {
         "vscode": {
@@ -63,7 +63,7 @@ Located in `.devcontainer/devcontainer.json`:
    - Projection operations (range and indices)
    - Selection operations
 
-5. **CRUD Suite** (1 test) - ❌ Requires server + compilation fixes
+5. **CRUD Suite** (1 test) - ✅ Compilation fixed, requires server
    - Complete database operations: Create, Read, Update, Delete
    - Client connection and table management
 
@@ -83,6 +83,12 @@ Located in `.devcontainer/devcontainer.json`:
 ```bash
 # Clean build and run tests
 docker run --rm -v "$(pwd)":/app -w /app sha256:716a32fd6c93631972b5674ef88a1c9b9c498ded23929fec4102781d2be39bda bash -c "apt-get update -qq && apt-get install -y -qq netcat-openbsd && rm -rf build && ./run_tests.sh"
+```
+in win cmd run:
+
+```
+docker run --rm -v "%cd%":/app -w /app mdv_dev:2025-01-11 bash -c "rm -rf build && ./run_tests.sh"
+
 ```
 
 ## Test Architecture
@@ -108,14 +114,17 @@ docker run --rm -v "$(pwd)":/app -w /app sha256:716a32fd6c93631972b5674ef88a1c9b
 - Server configuration
 
 ### ❌ Known Issues
-1. Missing include dependencies (`mdv_objid.h`)
-2. Struct definition mismatches in `mdv_rowlist_entry`
-3. Circular dependencies between platform and types layers
+1. Circular dependencies between platform and types layers
+2. Some test suites require additional dependency fixes
 
 ### 🔧 Required Fixes
-1. Fix struct definitions in `mdv_types/mdv_rowset.c`
-2. Resolve circular dependencies
-3. Complete include fixes for missing headers
+1. Resolve remaining circular dependencies
+2. Fix remaining test suite compilation issues
+
+### ✅ Recently Fixed
+1. ✅ mdv_client compilation issues (missing includes, function signatures)
+2. ✅ Enumerator structure incomplete type errors
+3. ✅ Function signature mismatches in mdv_rowset_append
 
 ## Test Framework
 - **Framework**: MinUnit (lightweight C testing)

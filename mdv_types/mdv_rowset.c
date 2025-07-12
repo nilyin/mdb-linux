@@ -1,4 +1,5 @@
 #include "mdv_rowset.h"
+#include <mdv_enumerator.h>
 #include <mdv_alloc.h>
 #include <mdv_log.h>
 #include <assert.h>
