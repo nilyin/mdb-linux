@@ -4,9 +4,9 @@
 #include <mdv_log.h>
 #include <mdv_table.h>
 #include <mdv_rowset.h>
+#include <mdv_enumerator.h>
 
-
-MU_TEST(create_read_update_delete)
+void create_read_update_delete(void)
 {
     mdv_client_config config =
     {
@@ -101,7 +101,3 @@ MU_TEST(create_read_update_delete)
 }
 
 
-MU_TEST_SUITE(crud)
-{
-    MU_RUN_TEST(create_read_update_delete);
-}

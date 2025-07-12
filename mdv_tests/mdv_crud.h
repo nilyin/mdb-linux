@@ -1,3 +1,10 @@
 #pragma once
+#include <minunit.h>
 
-MU_TEST_SUITE(crud);
+// Forward declaration
+void create_read_update_delete(void);
+
+MU_TEST_SUITE(crud)
+{
+    MU_RUN_TEST(create_read_update_delete);
+}
