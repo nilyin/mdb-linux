@@ -29,6 +29,7 @@ if(BUILD_JNI)
                 ${SWIG_OUTDIR}/mdv.java
                 ${SWIG_OUTDIR}/mdvJNI.java
                 ${SWIG_OUTDIR}/UUID.java
+                ${SWIG_OUTDIR}/ObjectId.java
                 ${SWIG_OUTDIR}/BitSet.java
                 ${SWIG_OUTDIR}/Field.java
                 ${SWIG_OUTDIR}/FieldType.java
@@ -55,6 +56,7 @@ if(BUILD_JNI)
                 ${SWIG_OUTDIR}/ClientDbConfig.java
                 ${SWIG_OUTDIR}/ClientConnectionConfig.java
                 ${SWIG_OUTDIR}/ClientThreadpoolConfig.java
+                ${SWIG_OUTDIR}/SWIGTYPE_p_unsigned_char.java
             )
 
             add_custom_target(mdv_swig4j ALL

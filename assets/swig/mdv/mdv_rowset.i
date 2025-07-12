@@ -3,6 +3,7 @@
 %inline %{
 #include <mdv_rowset.h>
 #include <mdv_alloc.h>
+#include <mdv_enumerator.h>
 %}
 
 %include "mdv_row.i"
@@ -31,7 +32,7 @@ typedef struct {} mdv_rowset;
 %typemap(javaimports) mdv_rows_enumerator %{
 import java.util.Iterator;
 %}
-%typemap(javainterfaces) mdv_rows_enumerator "implements Iterator<Row>, AutoCloseable";
+%typemap(javainterfaces) mdv_rows_enumerator "Iterator<Row>, AutoCloseable";
 
 typedef struct {} mdv_rows_enumerator;
 
@@ -80,7 +81,7 @@ typedef struct {} mdv_rows_enumerator;
 
         mdv_table_release(table);
 
-        return mdv_rowset_append($self, rows, 1) == 1;
+        return mdv_rowset_append($self, NULL, rows, 1) == 1;
     }
 
     mdv_rows_enumerator * get_enumerator()
@@ -105,15 +106,7 @@ typedef struct {} mdv_rows_enumerator;
 }
 
 
-mdv_errno delete(mdv_client *client, mdv_objid const *row_id)
-{
-    return mdv_delete(client, mdv_rowset_table($self), row_id);
-}
 
-mdv_errno update(mdv_client *client, mdv_objid const *row_id, mdv_rowset *rowset)
-{
-    return mdv_update(client, mdv_rowset_table($self), row_id, rowset);
-}
 
 %newobject mdv_rows_enumerator::current;
 
@@ -129,19 +122,21 @@ mdv_errno update(mdv_client *client, mdv_objid const *row_id, mdv_rowset *rowset
         }
     }
 
-    boolean hasNext()
+    bool hasNext()
     {
         return $self && $self->enumerator != NULL && mdv_enumerator_next($self->enumerator) == MDV_OK;
     }
 
     mdv_datums * next()
     {
-        return current();
+        if (mdv_enumerator_next($self->enumerator) == MDV_OK)
+            return mdv_rows_enumerator_current($self);
+        return NULL;
     }
 
     void remove()
     {
-        throw new UnsupportedOperationException();
+        // Unsupported operation - do nothing
     }
 
     bool reset()

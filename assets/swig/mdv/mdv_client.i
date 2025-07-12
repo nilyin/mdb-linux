@@ -19,6 +19,8 @@ typedef struct {} mdv_client;
 %newobject mdv_client::getTable;
 %newobject mdv_client::select;
 
+%rename("mdv_client_select_impl") mdv_client::select;
+
 %extend mdv_client
 {
     static mdv_client * connect(mdv_client_config const *config);
