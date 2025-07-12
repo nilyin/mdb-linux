@@ -34,7 +34,7 @@ make medved mdv_tests -j4
 echo
 echo '=== Starting MedvedDB Server ==='
 # Start server in background
-./mdv_service/medved &
+./mdv_service/medved --cfg=../assets/conf/medved.conf &
 SERVER_PID=\$!
 
 # Wait for server to start

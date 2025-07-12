@@ -42,6 +42,6 @@ typedef struct {} mdv_client;
 
     mdv_rowset * select(mdv_table *table, mdv_bitset *fields, char const *filter)
     {
-        return mdv_select($self, table, fields, filter);
+        return mdv_client_select($self, table, fields, filter);
     }
 }

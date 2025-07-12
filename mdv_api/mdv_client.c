@@ -1113,10 +1113,10 @@ static mdv_errno mdv_select_request(mdv_client *client,
 }
 
 
-mdv_rowset * mdv_select(mdv_client *client,
-                        mdv_table  *table,
-                        mdv_bitset *fields,
-                        char const *filter)
+mdv_rowset * mdv_client_select(mdv_client *client,
+                               mdv_table  *table,
+                               mdv_bitset *fields,
+                               char const *filter)
 {
     mdv_table *table_slice = mdv_table_slice(table, fields);
 
