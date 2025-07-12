@@ -257,7 +257,7 @@ SWIGINTERN bool mdv_client_insert(mdv_client *self,mdv_rowset *rowset){
         return mdv_insert(self, rowset) == MDV_OK;
     }
 SWIGINTERN mdv_rowset *mdv_client_select(mdv_client *self,mdv_table *table,mdv_bitset *fields,char const *filter){
-        return mdv_select(self, table, fields, filter);
+        return mdv_client_select(self, table, fields, filter);
     }
 
 #include <mdv_table.h>

@@ -68,6 +68,15 @@ Located in `.devcontainer/devcontainer.json`:
    - Client connection and table management via `mdv_client_select()`
    - Server integration at tcp://127.0.0.1:4800 - **WORKING**
 
+6. **Performance Suite** (8 tests) - 🆕 **Comprehensive benchmarking**
+   - Bulk operations: inserts, updates, reads (configurable batch sizes)
+   - Single operations: inserts, updates, reads, deletes (high volume)
+   - System monitoring: CPU usage, memory consumption, execution time
+   - Configurable test parameters via `perf_config.h`
+   - Detailed metrics: min/max/avg for time, CPU, and memory usage
+   - Summary table with complete performance analysis
+   - **Status**: ⚠️ Framework complete, debugging client segfault
+
 ## Usage Commands
 
 ### Recommended Test Scripts (Located in `../scripts/`)
@@ -105,6 +114,18 @@ powershell -ExecutionPolicy Bypass -File scripts\test_data_consistency.ps1
 ./scripts/run_all_tests_final.sh
 ```
 **Runtime**: ~60-90 seconds with cache
+
+#### Performance Benchmarking
+```bash
+# Build performance tests (using Docker cache for 10x speed)
+docker run --rm -v "$(pwd)":/app -v mdv_build_cache:/app/build -w /app/build medveddb-test:latest bash -c "cmake .. && make mdv_perf_minimal -j4"
+
+# Run minimal performance test
+docker run --rm -p 4800:4800 -v "$(pwd)":/app -v mdv_build_cache:/app/build -w /app/build medveddb-test:latest bash -c "./mdv_service/medved --cfg=../assets/conf/medved.conf & sleep 5 && ./mdv_tests/mdv_perf_minimal"
+```
+**Runtime**: ~30 seconds build + test execution
+**Output**: Performance metrics with timing, CPU, and memory analysis
+**Status**: ⚠️ Framework ready, investigating client segfault issue
 
 #### Build Only
 ```bash
@@ -157,6 +178,15 @@ docker volume rm mdv_build_cache  # Clean when needed
 - Symbol conflict resolved: `mdv_select` → `mdv_client_select`
 - 500+ tests passing (99.8% success rate)
 
+**Performance Tests**: 🆕 **Comprehensive benchmarking suite**
+- **Bulk Operations**: Configurable batch inserts/updates/reads (default: 100 rows/batch)
+- **Single Operations**: High-volume individual operations (default: 100K operations)
+- **System Monitoring**: Real-time CPU usage, memory consumption, execution timing
+- **Metrics Collection**: Min/Max/Average values for all performance indicators
+- **Configurable Parameters**: Test volumes and batch sizes via `perf_config.h`
+- **Summary Reporting**: Detailed table with complete performance analysis
+- **Test Coverage**: 8 distinct operation types with comprehensive metrics
+
 ### ✅ Fixed Issues
 1. mdv_client compilation (missing includes, function signatures)
 2. Enumerator structure incomplete type errors
@@ -166,10 +196,60 @@ docker volume rm mdv_build_cache  # Clean when needed
 6. **Symbol conflict resolution**: `mdv_select` function renamed to `mdv_client_select`
 7. **CRUD test execution**: Server integration and database operations verified
 
+## Performance Test Configuration
+
+### Test Operations
+1. **Bulk Inserts**: Multiple batch insertions (default: 100 rows/batch, 10K total)
+2. **Single Inserts**: Individual row insertions (default: 100K operations)
+3. **Single Updates**: Individual row updates on existing data (default: 100K operations)
+4. **Bulk Updates**: Batch row updates in transactions (default: 100K operations)
+5. **Bulk Reads**: Ordered batch reads (default: 100 rows/batch, 100K total reads)
+6. **Single Reads**: Individual arbitrary row reads (default: 100K operations)
+7. **Single Deletes**: Individual row deletions by row_id (default: 100K operations)
+8. **Delete All**: Complete table cleanup operation
+
+### Metrics Collected
+- **Timing**: Min/Max/Average execution time per operation (milliseconds)
+- **CPU Usage**: Min/Max/Average CPU load percentage per core
+- **Memory**: Min/Max/Average RAM usage by server process (MB)
+- **Throughput**: Operations per second calculations
+- **Resource Efficiency**: CPU and memory usage per operation
+
+### Configuration Parameters (`perf_config.h`)
+```c
+// Bulk operation settings
+bulk_batch_size = 100        // Rows per bulk batch
+bulk_total_inserts = 10000   // Total bulk insert operations
+bulk_total_updates = 100000  // Total bulk update operations
+bulk_total_reads = 100000    // Total bulk read operations
+
+// Single operation settings
+single_total_inserts = 100000  // Individual insert operations
+single_total_updates = 100000  // Individual update operations
+single_total_reads = 100000    // Individual read operations
+single_total_deletes = 100000  // Individual delete operations
+
+// Test execution settings
+warmup_iterations = 10       // Warmup runs before measurement
+measurement_samples = 5      // Samples for statistical averaging
+```
+
+### Additional Valuable Tests (Suggested)
+1. **Concurrent Operations**: Multi-threaded read/write performance
+2. **Transaction Rollback**: Performance impact of failed transactions
+3. **Index Performance**: Query performance with/without indexes
+4. **Large Data Sets**: Performance with varying row sizes (1KB, 10KB, 100KB)
+5. **Connection Pool**: Multiple client connection performance
+6. **Network Latency**: Performance under simulated network delays
+7. **Memory Pressure**: Performance under constrained memory conditions
+8. **Disk I/O**: Storage performance with different disk types (SSD vs HDD)
+
 ## Test Framework
 - **Framework**: MinUnit (lightweight C testing)
 - **Execution**: Sequential with timing and reporting
 - **Output**: Pass/fail status with detailed error messages
+- **Performance**: System resource monitoring with CPU/memory metrics
+- **Benchmarking**: Configurable test parameters and comprehensive analysis
 
 ## Files Structure
 ```
@@ -179,6 +259,11 @@ mdv_tests/
 ├── minunit.h               # Test framework
 ├── mdv_*.h                 # Test suite headers
 ├── mdv_*.c                 # Test implementations
+├── mdv_perf.h              # Performance test header
+├── mdv_perf.c              # Full performance test suite
+├── mdv_perf_simple.c       # Simplified performance test
+├── mdv_perf_minimal.c      # Minimal test for debugging
+├── perf_config.h           # Performance test configuration
 ├── mdv_platform/           # Platform component tests
 ├── mdv_types/              # Type system tests
 ├── mdv_storage/            # Storage layer tests
