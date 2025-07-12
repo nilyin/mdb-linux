@@ -1,0 +1,23 @@
+# Multi-stage Dockerfile for development with pre-built dependencies
+FROM medveddb-test:latest as builder
+
+# Copy source and build core libraries
+WORKDIR /app
+COPY . .
+
+# Build only the stable libraries that don't change often
+RUN mkdir -p build && cd build && \
+    cmake .. && \
+    make mdv_platform mdv_types mdv_net -j$(nproc) && \
+    echo "Core libraries built"
+
+# Development stage with pre-built libraries
+FROM medveddb-test:latest as dev
+
+# Copy pre-built libraries
+COPY --from=builder /app/build /app/build
+
+WORKDIR /app
+
+# This stage can quickly rebuild only changed components
+CMD ["bash"]

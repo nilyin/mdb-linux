@@ -6,14 +6,13 @@
 #include <mdv_rowset.h>
 
 
-MU_TEST(crud, create_read_update_delete)
+MU_TEST(create_read_update_delete)
 {
     mdv_client_config config =
     {
         .db =
         {
-            .path = ".mdb",
-            .name = "crud",
+            .addr = "tcp://127.0.0.1:4800"
         },
         .connection =
         {
@@ -34,18 +33,15 @@ MU_TEST(crud, create_read_update_delete)
 
     mdv_field fields[] =
     {
-        { "name", MDV_FLD_TYPE_CHAR(64) },
-        { "age",  MDV_FLD_TYPE_UINT32    }
+        { MDV_FLD_TYPE_CHAR, 64, "name" },
+        { MDV_FLD_TYPE_UINT32, 1, "age" }
     };
 
     mdv_table_desc table_desc =
     {
         .name = "users",
-        .fields =
-        {
-            .count = sizeof fields / sizeof *fields,
-            .entries = fields
-        }
+        .size = sizeof fields / sizeof *fields,
+        .fields = fields
     };
 
     mdv_table *table = mdv_create_table(client, &table_desc);
@@ -63,7 +59,7 @@ MU_TEST(crud, create_read_update_delete)
 
     mdv_data const *rows[] = { row };
 
-    mu_check(mdv_rowset_append(insert_rowset, 0, rows, 1) == 1);
+    mu_check(mdv_rowset_append(insert_rowset, NULL, rows, 1) == 1);
     mu_check(mdv_insert(client, insert_rowset) == MDV_OK);
     mdv_rowset_release(insert_rowset);
 
@@ -93,7 +89,7 @@ MU_TEST(crud, create_read_update_delete)
 
     mdv_data const *update_rows[] = { update_row };
 
-    mu_check(mdv_rowset_append(update_rowset, 0, update_rows, 1) == 1);
+    mu_check(mdv_rowset_append(update_rowset, NULL, update_rows, 1) == 1);
     mu_check(mdv_update(client, table, &row_id, update_rowset) == MDV_OK);
     mdv_rowset_release(update_rowset);
 
@@ -107,5 +103,5 @@ MU_TEST(crud, create_read_update_delete)
 
 MU_TEST_SUITE(crud)
 {
-    MU_RUN_TEST(crud, create_read_update_delete);
+    MU_RUN_TEST(create_read_update_delete);
 }
