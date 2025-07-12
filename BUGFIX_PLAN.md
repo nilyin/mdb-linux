@@ -77,6 +77,8 @@ mdv_rowset *mdv_client_select(mdv_client *client, mdv_table *table, size_t limit
 - ✅ **Server Functionality**: Working correctly
 - ✅ **Build System**: Optimized and reliable
 - ✅ **Script Organization**: Clean and functional
+- ✅ **Script Path Issues**: All fixed across .ps1, .bat, .sh formats
 - ⚠️ **CRUD Tests**: Ready but blocked by single linking issue
+- ⚠️ **Shell Script Environment**: WSL uses Podman instead of Docker (environmental)
 
-**Estimated Total Fix Time**: 2-3 hours
+**Estimated Total Fix Time**: 2-3 hours for CRUD linking
