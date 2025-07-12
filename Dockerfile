@@ -39,12 +39,16 @@ RUN cd /tmp \
     && cd / \
     && rm -rf /tmp/swig-4.3.1*
 
-# Install debugging tools
+# Install debugging tools for C89 applications
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gdb \
+    gdb-multiarch \
     valgrind \
     strace \
     ltrace \
+    binutils \
+    binutils-dev \
+    libc6-dbg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

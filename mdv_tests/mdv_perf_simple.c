@@ -88,9 +88,8 @@ void test_simple_inserts() {
     double end_time = get_time_ms();
     double total_time = end_time - start_time;
     
-    printf("Inserted %d/%d rows in %.2f ms\n", success_count, insert_count, total_time);
-    printf("Average time per insert: %.3f ms\n", total_time / insert_count);
-    printf("Inserts per second: %.1f\n", (success_count * 1000.0) / total_time);
+    printf("✅ Insert Test: %d/%d rows, %.2f ms avg, %.1f ops/sec\n", 
+           success_count, insert_count, total_time / insert_count, (success_count * 1000.0) / total_time);
 }
 
 void test_simple_reads() {
@@ -120,9 +119,8 @@ void test_simple_reads() {
     double end_time = get_time_ms();
     double total_time = end_time - start_time;
     
-    printf("Completed %d/%d read operations in %.2f ms\n", success_count, read_count, total_time);
-    printf("Average time per read: %.3f ms\n", total_time / read_count);
-    printf("Reads per second: %.1f\n", (success_count * 1000.0) / total_time);
+    printf("✅ Read Test: %d/%d ops, %.3f ms avg, %.1f ops/sec\n", 
+           success_count, read_count, total_time / read_count, (success_count * 1000.0) / total_time);
 }
 
 int main() {

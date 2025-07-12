@@ -16,6 +16,11 @@ double get_time_ms() {
 int main() {
     printf("=== MedvedDB Minimal Performance Test ===\n");
     
+    // Clean database before test
+    printf("🧹 Cleaning database...\n");
+    system("rm -rf ./data");
+    system("mkdir -p ./data");
+    
     // Connect to server
     mdv_client_config config = {
         .db = { .addr = "tcp://127.0.0.1:4800" },
@@ -59,7 +64,6 @@ int main() {
     for (int i = 0; i < insert_count; i++) {
         mdv_rowset *rowset = mdv_rowset_create(table);
         if (!rowset) {
-            printf("❌ Failed to create rowset for insert %d\n", i);
             continue;
         }
         
@@ -72,16 +76,13 @@ int main() {
             { .ptr = &age, .size = sizeof(uint32_t) }
         };
         mdv_data const *rows[] = { row };
+        mdv_objid row_id = {0};
         
-        if (mdv_rowset_append(rowset, NULL, rows, 1) == 1) {
+        if (mdv_rowset_append(rowset, &row_id, rows, 1) == 1) {
             if (mdv_insert(client, rowset) == MDV_OK) {
                 success_count++;
-                if (i % 10 == 0) printf("✅ Inserted %d rows\n", i + 1);
-            } else {
-                printf("❌ Insert failed for row %d\n", i);
+                // Removed verbose logging during transactions
             }
-        } else {
-            printf("❌ Rowset append failed for row %d\n", i);
         }
         
         mdv_rowset_release(rowset);

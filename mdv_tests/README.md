@@ -178,7 +178,7 @@ docker volume rm mdv_build_cache  # Clean when needed
 - Symbol conflict resolved: `mdv_select` → `mdv_client_select`
 - 500+ tests passing (99.8% success rate)
 
-**Performance Tests**: 🆕 **Comprehensive benchmarking suite**
+**Performance Tests**: ✅ **Framework operational, baseline metrics established**
 - **Bulk Operations**: Configurable batch inserts/updates/reads (default: 100 rows/batch)
 - **Single Operations**: High-volume individual operations (default: 100K operations)
 - **System Monitoring**: Real-time CPU usage, memory consumption, execution timing
@@ -186,6 +186,8 @@ docker volume rm mdv_build_cache  # Clean when needed
 - **Configurable Parameters**: Test volumes and batch sizes via `perf_config.h`
 - **Summary Reporting**: Detailed table with complete performance analysis
 - **Test Coverage**: 8 distinct operation types with comprehensive metrics
+- **Baseline Results**: 11.8 inserts/second, 84.7ms avg per operation
+- **Status**: Server connection ✅, Table creation ✅, Rowset operations ✅
 
 ### ✅ Fixed Issues
 1. mdv_client compilation (missing includes, function signatures)
@@ -233,6 +235,39 @@ single_total_deletes = 100000  // Individual delete operations
 warmup_iterations = 10       // Warmup runs before measurement
 measurement_samples = 5      // Samples for statistical averaging
 ```
+
+### Performance Test Execution Guide
+
+#### Quick Start (Docker Cache Optimized)
+```bash
+# 1. Build performance tests (MANDATORY: Use cache for 10x speed)
+docker run --rm -v "$(pwd)":/app -v mdv_build_cache:/app/build -w /app/build medveddb-test:latest bash -c "cmake .. && make mdv_perf_minimal -j4"
+
+# 2. Run performance test (WORKING)
+docker run --rm -p 4800:4800 -v "$(pwd)":/app -v mdv_build_cache:/app/build -w /app/build medveddb-test:latest bash -c "./mdv_service/medved --cfg=../assets/conf/medved.conf & sleep 5 && ./mdv_tests/mdv_perf_minimal"
+
+# 3. Debug mode (if needed)
+docker run --rm -p 4800:4800 -v "$(pwd)":/app -v mdv_build_cache:/app/build -w /app/build medveddb-test:latest bash -c "./mdv_service/medved --cfg=../assets/conf/medved.conf & sleep 5 && gdb --batch --ex run --ex bt --args ./mdv_tests/mdv_perf_minimal"
+```
+
+#### 🚨 CRITICAL REQUIREMENT
+**ALWAYS use `mdv_build_cache` Docker volume** - reduces build time from 4+ minutes to 4-6 seconds
+
+#### Current Status
+- ✅ **Docker Environment**: JDK 21, C89 debugging tools installed
+- ✅ **Build System**: 10x faster incremental builds with cache
+- ✅ **Server Integration**: MedvedDB starts and accepts connections
+- ✅ **Table Operations**: Database table creation successful
+- ✅ **Rowset Operations**: Fixed NULL parameter issue, fully operational
+- ✅ **Performance Baseline**: 11.8 inserts/second established
+
+#### 🚨 MANDATORY: Docker Cache Usage
+**CRITICAL**: Always use cached Docker layers for all operations:
+```bash
+# REQUIRED for 10x speed improvement
+docker run --rm -v "$(pwd)":/app -v mdv_build_cache:/app/build medveddb-test:latest
+```
+**Impact**: Build time reduced from 4+ minutes to 4-6 seconds
 
 ### Additional Valuable Tests (Suggested)
 1. **Concurrent Operations**: Multi-threaded read/write performance

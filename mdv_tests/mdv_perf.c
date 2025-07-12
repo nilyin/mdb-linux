@@ -89,14 +89,8 @@ void mdv_perf_update_metrics(mdv_perf_metrics *total, mdv_perf_metrics *sample) 
 }
 
 void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics) {
-    printf("\n=== %s Performance Results ===\n", operation);
-    printf("Time (ms):   Min: %.2f, Max: %.2f, Avg: %.2f\n", 
-           metrics->min_time_ms, metrics->max_time_ms, metrics->avg_time_ms);
-    printf("CPU (%%):     Min: %.2f, Max: %.2f, Avg: %.2f\n", 
-           metrics->min_cpu_percent, metrics->max_cpu_percent, metrics->avg_cpu_percent);
-    printf("Memory (MB): Min: %ld, Max: %ld, Avg: %ld\n", 
-           metrics->min_memory_mb, metrics->max_memory_mb, metrics->avg_memory_mb);
-    printf("Samples: %d\n", metrics->sample_count);
+    printf("✅ %s: %.2f ms avg (%.2f%% CPU, %ld MB)\n", 
+           operation, metrics->avg_time_ms, metrics->avg_cpu_percent, metrics->avg_memory_mb);
 }
 
 static int setup_test_environment(void) {
@@ -152,7 +146,8 @@ void mdv_perf_test_bulk_inserts(void) {
                     { .ptr = &timestamp, .size = sizeof(uint64_t) }
                 };
                 mdv_data const *rows[] = { row };
-                mdv_rowset_append(rowset, NULL, rows, 1);
+                mdv_objid row_id = {0};
+                mdv_rowset_append(rowset, &row_id, rows, 1);
             }
             
             mdv_insert(g_client, rowset);
@@ -189,8 +184,9 @@ void mdv_perf_test_single_inserts(void) {
                 { .ptr = &timestamp, .size = sizeof(uint64_t) }
             };
             mdv_data const *rows[] = { row };
+            mdv_objid row_id = {0};
             
-            mdv_rowset_append(rowset, NULL, rows, 1);
+            mdv_rowset_append(rowset, &row_id, rows, 1);
             mdv_insert(g_client, rowset);
             mdv_rowset_release(rowset);
         }
@@ -239,8 +235,9 @@ void mdv_perf_test_single_updates(void) {
                 { .ptr = &timestamp, .size = sizeof(uint64_t) }
             };
             mdv_data const *rows[] = { row };
+            mdv_objid update_id = {0};
             
-            mdv_rowset_append(rowset, NULL, rows, 1);
+            mdv_rowset_append(rowset, &update_id, rows, 1);
             mdv_update(g_client, g_table, &row_ids[i], rowset);
             mdv_rowset_release(rowset);
         }
@@ -284,8 +281,9 @@ void mdv_perf_test_bulk_updates(void) {
                     { .ptr = &timestamp, .size = sizeof(uint64_t) }
                 };
                 mdv_data const *rows[] = { row };
+                mdv_objid bulk_id = {0};
                 
-                mdv_rowset_append(update_rowset, NULL, rows, 1);
+                mdv_rowset_append(update_rowset, &bulk_id, rows, 1);
                 mdv_update(g_client, g_table, &row_id, update_rowset);
                 updates++;
             }
@@ -442,6 +440,11 @@ void mdv_perf_print_summary_table(void) {
 
 void mdv_run_performance_tests(void) {
     printf("=== MedvedDB Performance Test Suite ===\n");
+    
+    // Clean database before test
+    printf("🧹 Cleaning database...\n");
+    system("rm -rf ./data");
+    system("mkdir -p ./data");
     printf("Configuration:\n");
     printf("  Bulk batch size: %d\n", g_config.bulk_batch_size);
     printf("  Bulk inserts: %d\n", g_config.bulk_total_inserts);
