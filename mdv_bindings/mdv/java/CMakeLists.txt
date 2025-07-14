@@ -11,7 +11,7 @@ if(BUILD_JNI)
 
         if(SWIG_FOUND)
             set(SWIG_OUTDIR ${CMAKE_CURRENT_BINARY_DIR})
-            set(SWIG_OUT ${SOURCES})
+            set(SWIG_OUT ${CMAKE_CURRENT_BINARY_DIR}/mdv_api4j.c)
 
             set(SWIG_FLAGS
                 -java

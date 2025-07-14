@@ -1,4 +1,3 @@
-#include <minunit.h>
 #include "mdv_platform.h"
 #include "mdv_types.h"
 #include "mdv_core.h"
@@ -6,6 +5,7 @@
 #include "mdv_storage.h"
 #include "mdv_crud.h"
 #include "mdv_perf.h"
+#include <minunit.h>
 #include <mdv_log.h>
 #include <string.h>
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "minunit.h"
 #include "mdv_types/mdv_serialization.h"
 #include "mdv_types/mdv_rowset.h"
 #include "mdv_types/mdv_table.h"
