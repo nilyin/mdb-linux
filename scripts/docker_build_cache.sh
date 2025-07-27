@@ -9,7 +9,7 @@ docker run --rm \
   -v "$(pwd)":/app \
   -v mdv_build_cache:/app/build \
   -w /app \
-  medveddb-test:latest \
+  medveddb-test:1 \
   bash -c "$*"
 
 echo

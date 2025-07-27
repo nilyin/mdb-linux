@@ -6,7 +6,7 @@ This directory contains the comprehensive test suite for MedvedDB C language com
 ## Container Configuration
 
 ### Docker Image
-- **Image**: `medveddb-test:latest`
+- **Image**: `medveddb-test:1`
 - **Base OS**: Debian Bullseye Slim
 - **Build Tools**: GCC 10.2.1, CMake 3.18.4, Git
 - **Java**: OpenJDK 11.0.27
