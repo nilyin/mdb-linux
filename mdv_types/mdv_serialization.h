@@ -5,6 +5,7 @@
 #include <mdv_topology.h>
 #include <mdv_bitset.h>
 #include <stdbool.h>
+#include <mdv_enumerator.h>
 
 
 bool                mdv_binn_table_desc(mdv_table_desc const *table, binn *obj);

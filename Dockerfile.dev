@@ -7,7 +7,7 @@ COPY . .
 
 # Build only the stable libraries that don't change often
 RUN mkdir -p build && cd build && \
-    rm -rf CMakeCache.txt CMakeFiles && \
+    # rm -rf CMakeCache.txt CMakeFiles && \
     cmake .. && \
     make mdv_platform mdv_types mdv_net -j$(nproc) && \
     echo "Core libraries built"
