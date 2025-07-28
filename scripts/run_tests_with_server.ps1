@@ -1,9 +1,6 @@
 # PowerShell script to run tests with server using incremental build
 $VOLUME_NAME = "mdv_build_cache"
-$IMAGE_NAME = "medveddb-test:latest"
-
-Write-Host "=== MedvedDB Tests with Server ===" -ForegroundColor Green
-Write-Host "Volume location: /var/lib/docker/volumes/$VOLUME_NAME/_data" -ForegroundColor Yellow
+$IMAGE_NAME = "medveddb-test:latest1r/volumes/$VOLUME_NAME/_data" -ForegroundColor Yellow
 
 # Build tests without CRUD first
 Write-Host "Building platform tests..." -ForegroundColor Cyan

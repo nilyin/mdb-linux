@@ -3,7 +3,7 @@ REM Platform-only tests using Docker cache
 REM DEPRECATED: Use test_data_consistency.bat instead
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Platform Tests Only ===
 echo ⚠️  DEPRECATED: This script is maintained for compatibility

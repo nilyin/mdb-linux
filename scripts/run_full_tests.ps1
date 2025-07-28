@@ -5,7 +5,7 @@ param(
 )
 
 $VOLUME_NAME = "mdv_build_cache"
-$IMAGE_NAME = "medveddb-test:latest"
+$IMAGE_NAME = "medveddb-test:1"
 $SERVER_CONTAINER = "mdv_server"
 
 Write-Host "=== MedvedDB Full Test Suite (PowerShell) ===" -ForegroundColor Green

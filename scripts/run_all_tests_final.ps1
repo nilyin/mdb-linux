@@ -4,7 +4,7 @@ param(
 )
 
 $VOLUME_NAME = "mdv_build_cache"
-$IMAGE_NAME = "medveddb-test:latest"
+$IMAGE_NAME = "medveddb-test:1"
 
 Write-Host "=== MedvedDB Complete Test Execution ===" -ForegroundColor Green
 Write-Host "Running all test scripts: run_full_tests.ps1 and run_tests_with_server.ps1" -ForegroundColor Cyan

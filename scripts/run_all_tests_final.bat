@@ -2,7 +2,7 @@
 REM Complete test execution - matches run_all_tests_final.ps1
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Complete Test Execution ===
 echo Running all test scripts plus server verification

@@ -1,6 +1,6 @@
 # PowerShell script to run core tests (without CRUD) with server verification
 $VOLUME_NAME = "mdv_build_cache"
-$IMAGE_NAME = "medveddb-test:latest"
+$IMAGE_NAME = "medveddb-test:1"
 
 Write-Host "=== MedvedDB Core Test Suite ===" -ForegroundColor Green
 Write-Host "Running Platform, Types, Storage, and Crypto tests" -ForegroundColor Cyan

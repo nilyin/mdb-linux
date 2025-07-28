@@ -2,7 +2,7 @@
 REM Docker incremental build with cache - optimized approach
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Incremental Build ===
 echo Using Docker cache for 10x faster builds

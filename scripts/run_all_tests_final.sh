@@ -4,7 +4,7 @@
 set -e
 
 VOLUME_NAME="mdv_build_cache"
-IMAGE_NAME="medveddb-test:latest"
+IMAGE_NAME="medveddb-test:1"
 
 echo "=== MedvedDB Complete Test Execution ==="
 echo "Running all test scripts plus server verification"

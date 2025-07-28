@@ -2,7 +2,7 @@
 REM Single container test with server - matches run_complete_tests.ps1
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Complete Test Suite ===
 echo Running all tests including CRUD with integrated server

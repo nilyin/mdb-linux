@@ -27,7 +27,7 @@ include(cmake/sanitizer.cmake)
 #*********************************************************
 SET(MAJOR_VERSION 1)
 SET(MINOR_VERSION 0)
-SET(PATCH_VERSION 0)
+SET(PATCH_VERSION 1)
 
 set(VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 
@@ -98,6 +98,11 @@ endif()
 macro(use_c11)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
+    # set(CMAKE_C_EXTENSIONS OFF)
+
+    # C11 specific compiler flags
+    # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -Wall -Wextra -Wpedantic -g -O0")
+
 endmacro(use_c11)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

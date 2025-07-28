@@ -2,7 +2,7 @@
 REM Core components with server verification - matches run_core_tests.ps1
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Core Test Suite ===
 echo Running Platform, Types, Storage, and Crypto tests

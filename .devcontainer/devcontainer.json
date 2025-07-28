@@ -1,14 +1,19 @@
 {
-    "name": "MedvedDB Test Environment",
-    "image": "mdv_dev:2025-01-11",
+    "name": "MedvedDB C11 Development Environment",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
     "workspaceFolder": "/app",
+    "forwardPorts": [22],
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-vscode.cpptools",
-                "ms-vscode.cmake-tools"
+                "ms-vscode.cmake-tools",
+                "vadimcn.vscode-lldb"
             ]
         }
     },
-    "postCreateCommand": "chmod +x run_tests.sh && chmod +x run_platform_tests.sh"
+    "postCreateCommand": "chmod +x scripts/*.sh"
 }

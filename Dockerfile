@@ -21,6 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bison \
     libpcre3-dev \
     libpcre2-dev \
+    gcc \
+    gcc-multilib \
+    libc6-dev \
+    libc6-dbg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

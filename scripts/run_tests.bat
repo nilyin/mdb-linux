@@ -3,7 +3,7 @@ REM Legacy test runner - now uses Docker for consistency
 REM DEPRECATED: Use run_complete_tests.bat instead
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Legacy Test Runner ===
 echo ⚠️  DEPRECATED: This script is maintained for compatibility

@@ -1,6 +1,11 @@
 # Multi-stage Dockerfile for development with pre-built dependencies
 FROM medveddb-test:1 AS builder
 
+# Set C11 compilation flags
+# ENV CFLAGS="-std=c11 -Wall -Wextra -Wpedantic -g -O0"
+# ENV CXXFLAGS="-std=c11 -Wall -Wextra -Wpedantic -g -O0"
+
+
 # Copy source and build core libraries
 WORKDIR /app
 COPY . .

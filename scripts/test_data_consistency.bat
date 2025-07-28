@@ -2,7 +2,7 @@
 REM Core components test - matches run_tests_with_server.ps1
 
 set VOLUME_NAME=mdv_build_cache
-set IMAGE_NAME=medveddb-test:latest
+set IMAGE_NAME=medveddb-test:1
 
 echo === MedvedDB Tests with Server ===
 echo Volume location: /var/lib/docker/volumes/%VOLUME_NAME%/_data

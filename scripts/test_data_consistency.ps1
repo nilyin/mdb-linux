@@ -1,7 +1,7 @@
 # Core components test - matches run_tests_with_server.ps1
 
 $VOLUME_NAME = "mdv_build_cache"
-$IMAGE_NAME = "medveddb-test:latest"
+$IMAGE_NAME = "medveddb-test:1"
 
 Write-Host "=== MedvedDB Tests with Server ===" -ForegroundColor Green
 Write-Host "Volume location: /var/lib/docker/volumes/$VOLUME_NAME/_data" -ForegroundColor Yellow

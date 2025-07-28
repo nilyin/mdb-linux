@@ -4,7 +4,7 @@
 set -e
 
 VOLUME_NAME="mdv_build_cache"
-IMAGE_NAME="medveddb-test:latest"
+IMAGE_NAME="medveddb-test:1"
 
 echo "=== MedvedDB Tests with Server ==="
 echo "Volume location: /var/lib/docker/volumes/$VOLUME_NAME/_data"
