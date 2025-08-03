@@ -205,7 +205,7 @@ void mdv_perf_test_single_updates(void) {
     mdv_perf_metrics total_metrics = {0};
     
     // Get some row IDs first
-    mdv_rowset *select_rowset = mdv_client_select(g_client, g_table, NULL, "");
+    mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
     mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
     
     mdv_objid *row_ids = malloc(g_config.single_total_updates * sizeof(mdv_objid));
@@ -262,7 +262,7 @@ void mdv_perf_test_bulk_updates(void) {
         mdv_perf_monitor_start(&monitor);
         
         for (int batch = 0; batch < batches; batch++) {
-            mdv_rowset *select_rowset = mdv_client_select(g_client, g_table, NULL, "");
+            mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
             mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
             
             mdv_rowset *update_rowset = mdv_rowset_create(g_table);
@@ -312,7 +312,7 @@ void mdv_perf_test_bulk_reads(void) {
         mdv_perf_monitor_start(&monitor);
         
         for (int batch = 0; batch < batches; batch++) {
-            mdv_rowset *rowset = mdv_client_select(g_client, g_table, NULL, "");
+            mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             int count = 0;
@@ -342,7 +342,7 @@ void mdv_perf_test_single_reads(void) {
         mdv_perf_monitor_start(&monitor);
         
         for (int i = 0; i < g_config.single_total_reads; i++) {
-            mdv_rowset *rowset = mdv_client_select(g_client, g_table, NULL, "");
+            mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
@@ -371,7 +371,7 @@ void mdv_perf_test_single_deletes(void) {
         mdv_perf_monitor_start(&monitor);
         
         for (int i = 0; i < g_config.single_total_deletes; i++) {
-            mdv_rowset *rowset = mdv_client_select(g_client, g_table, NULL, "");
+            mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
@@ -400,7 +400,7 @@ void mdv_perf_test_delete_all(void) {
         mdv_perf_monitor monitor;
         mdv_perf_monitor_start(&monitor);
         
-        mdv_rowset *rowset = mdv_client_select(g_client, g_table, NULL, "");
+        mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
         mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
         
         while (mdv_enumerator_next(enumerator) == MDV_OK) {

@@ -64,7 +64,7 @@ void create_read_update_delete(void)
     mdv_rowset_release(insert_rowset);
 
     // Read
-    mdv_rowset *select_rowset = mdv_client_select(client, table, 0, "");
+    mdv_rowset *select_rowset = mdv_dbclient_select(client, table, 0, "");
     mu_check(select_rowset);
 
     mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);

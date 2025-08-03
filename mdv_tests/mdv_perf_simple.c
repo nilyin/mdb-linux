@@ -100,7 +100,7 @@ void test_simple_reads() {
     int success_count = 0;
     
     for (int i = 0; i < read_count; i++) {
-        mdv_rowset *rowset = mdv_client_select(g_client, g_table, NULL, "");
+        mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
         if (rowset) {
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             if (enumerator) {

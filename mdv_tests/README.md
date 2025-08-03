@@ -65,7 +65,7 @@ Located in `.devcontainer/devcontainer.json`:
 
 5. **CRUD Suite** (1 test) - ✅ **Server integration verified**
    - Complete database operations: Create, Read, Update, Delete
-   - Client connection and table management via `mdv_client_select()`
+   - Client connection and table management via `mdv_dbclient_select()`
    - Server integration at tcp://127.0.0.1:4800 - **WORKING**
 
 6. **Performance Suite** (8 tests) - 🆕 **Comprehensive benchmarking**
@@ -175,7 +175,7 @@ docker volume rm mdv_build_cache  # Clean when needed
 **CRUD Tests**: ✅ **Successfully executed with server integration**
 - Server runs on tcp://127.0.0.1:4800
 - All database operations (Create, Read, Update, Delete) verified
-- Symbol conflict resolved: `mdv_select` → `mdv_client_select`
+- Symbol conflict resolved: `mdv_select` → `mdv_dbclient_select`
 - 500+ tests passing (99.8% success rate)
 
 **Performance Tests**: ✅ **Framework operational, baseline metrics established**
@@ -195,7 +195,7 @@ docker volume rm mdv_build_cache  # Clean when needed
 3. Function signature mismatches in mdv_rowset_append
 4. Build cache optimization implementation
 5. PowerShell execution scripts for Windows compatibility
-6. **Symbol conflict resolution**: `mdv_select` function renamed to `mdv_client_select`
+6. **Symbol conflict resolution**: `mdv_select` function renamed to `mdv_dbclient_select`
 7. **CRUD test execution**: Server integration and database operations verified
 
 ## Performance Test Configuration

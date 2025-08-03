@@ -200,7 +200,7 @@ static void mdv_show_tables(char const *args)
         {
             mdv_bitset_fill(mask, true);
 
-            mdv_rowset *resultset = mdv_client_select(client, table, mask, "");
+            mdv_rowset *resultset = mdv_dbclient_select(client, table, mask, "");
 
             if (resultset)
             {
@@ -242,7 +242,7 @@ static void mdv_show_table_desc(char const *uuid_str)
 
             char filter[] = "";
 
-            mdv_rowset *resultset = mdv_client_select(client, table, mask, filter);
+            mdv_rowset *resultset = mdv_dbclient_select(client, table, mask, filter);
 
             if (resultset)
             {
@@ -362,7 +362,7 @@ static void mdv_test_scenario(char const *args)
     {
         mdv_bitset_fill(mask, true);
 
-        mdv_rowset *resultset = mdv_client_select(client, table, mask, "");
+        mdv_rowset *resultset = mdv_dbclient_select(client, table, mask, "");
 
         if (resultset)
         {
