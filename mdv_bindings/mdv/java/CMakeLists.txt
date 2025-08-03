@@ -7,7 +7,14 @@ if(BUILD_JNI)
 
     if(JNI_FOUND)
 
-        set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        # set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        # the below ensures it uses the generated file when SWIG is available, 
+        # and falls back to the source file when SWIG is not found
+        if(SWIG_FOUND)
+            set(SOURCES ${CMAKE_CURRENT_BINARY_DIR}/mdv_api4j.c)
+        else()
+            set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        endif()
 
         if(SWIG_FOUND)
             set(SWIG_OUTDIR ${CMAKE_CURRENT_BINARY_DIR})

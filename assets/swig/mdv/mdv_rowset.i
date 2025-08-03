@@ -3,6 +3,7 @@
 %inline %{
 #include <mdv_rowset.h>
 #include <mdv_alloc.h>
+#include <mdv_enumerator.h>
 %}
 
 %include "mdv_row.i"
@@ -67,10 +68,12 @@ typedef struct {} mdv_rows_enumerator;
         }
 
         mdv_data const *rows[] = { data };
+        mdv_objid row_id = {0}; // Initialize with zero/empty row ID
+        mdv_objid const *row_ids[] = { &row_id };
 
         mdv_table_release(table);
 
-        return mdv_rowset_append($self, rows, 1) == 1;
+        return mdv_rowset_append($self, row_ids[0], rows, 1) == 1;
     }
 
     mdv_rows_enumerator * get_enumerator()
@@ -138,6 +141,12 @@ typedef struct {} mdv_rows_enumerator;
     bool next()
     {
         return mdv_enumerator_next($self->enumerator) == MDV_OK;
+    }
+
+    mdv_objid row_id()
+    {
+        mdv_objid const *id = mdv_enumerator_row_id($self->enumerator);
+        return *id;
     }
 
 }
