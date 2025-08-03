@@ -1,5 +1,6 @@
 {
-    "name": "MedvedDB C11 Development Environment",
+    "name": "medveddb-test",
+    "runArgs": ["--name", "medveddb-test"],
     "build": {
         "dockerfile": "../Dockerfile",
         "context": ".."

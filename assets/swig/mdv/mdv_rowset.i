@@ -3,7 +3,6 @@
 %inline %{
 #include <mdv_rowset.h>
 #include <mdv_alloc.h>
-#include <mdv_enumerator.h>
 %}
 
 %include "mdv_row.i"
@@ -23,18 +22,8 @@ typedef struct
 
 %nodefault;
 typedef struct {} mdv_rowset;
-%clearnodefault;
-
-%nodefaultctor mdv_rows_enumerator;
-%nodefaultdtor mdv_rows_enumerator;
-
-%feature("director:destructor") mdv_rows_enumerator "public synchronized void close()";
-%typemap(javaimports) mdv_rows_enumerator %{
-import java.util.Iterator;
-%}
-%typemap(javainterfaces) mdv_rows_enumerator "Iterator<Row>, AutoCloseable";
-
 typedef struct {} mdv_rows_enumerator;
+%clearnodefault;
 
 %newobject mdv_rowset::get_enumerator;
 
@@ -81,7 +70,7 @@ typedef struct {} mdv_rows_enumerator;
 
         mdv_table_release(table);
 
-        return mdv_rowset_append($self, NULL, rows, 1) == 1;
+        return mdv_rowset_append($self, rows, 1) == 1;
     }
 
     mdv_rows_enumerator * get_enumerator()
@@ -105,48 +94,15 @@ typedef struct {} mdv_rows_enumerator;
     }
 }
 
-
-
-
 %newobject mdv_rows_enumerator::current;
 
 %extend mdv_rows_enumerator
 {
-    void close()
+    ~mdv_rows_enumerator()
     {
-        if ($self)
-        {
-            mdv_table_release($self->table);
-            mdv_enumerator_release($self->enumerator);
-            mdv_free($self);
-        }
-    }
-
-    bool hasNext()
-    {
-        return $self && $self->enumerator != NULL && mdv_enumerator_next($self->enumerator) == MDV_OK;
-    }
-
-    mdv_datums * next()
-    {
-        if (mdv_enumerator_next($self->enumerator) == MDV_OK)
-            return mdv_rows_enumerator_current($self);
-        return NULL;
-    }
-
-    void remove()
-    {
-        // Unsupported operation - do nothing
-    }
-
-    bool reset()
-    {
-        return mdv_enumerator_reset($self->enumerator) == MDV_OK;
-    }
-
-    bool moveNext()
-    {
-        return mdv_enumerator_next($self->enumerator) == MDV_OK;
+        mdv_table_release($self->table);
+        mdv_enumerator_release($self->enumerator);
+        mdv_free($self);
     }
 
     mdv_datums * current()
@@ -174,9 +130,14 @@ typedef struct {} mdv_rows_enumerator;
         return datums;
     }
 
-    mdv_objid row_id()
+    bool reset()
     {
-        mdv_objid const *id = mdv_enumerator_row_id($self->enumerator);
-        return *id;
+        return mdv_enumerator_reset($self->enumerator) == MDV_OK;
     }
+
+    bool next()
+    {
+        return mdv_enumerator_next($self->enumerator) == MDV_OK;
+    }
+
 }

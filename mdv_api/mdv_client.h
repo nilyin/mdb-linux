@@ -152,7 +152,7 @@ mdv_errno mdv_update(mdv_client *client, mdv_table *table, mdv_objid const *row_
  * @return On success, return nonzero pointer to result set (mdv_rowset's set)
  * @return On error, return NULL pointer
  */
-mdv_rowset * mdv_client_select(mdv_client *client,
+mdv_rowset * mdv_dbclient_select(mdv_client *client,
                                mdv_table  *table,
                                mdv_bitset *fields,
                                char const *filter);

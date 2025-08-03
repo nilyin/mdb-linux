@@ -1,5 +1,4 @@
 
-
 macro(configure_doxyfile DOXYGEN_CONFIG_FILE FILE_NAME_SUFFIX)
 
     if(EXISTS ${PROJECT_SOURCE_DIR}/${DOXYGEN_CONFIG_FILE})
@@ -48,4 +47,3 @@ macro(add_documentation TARGET DOXYGEN_CONFIG_FILE)
     endif()
 
 endmacro(add_documentation)
-

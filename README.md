@@ -71,7 +71,7 @@ docker run --rm -v "%cd%":/app -v mdv_build_cache:/app/build -w /app medveddb-te
 ```bash
 mkdir build
 cd build
-cmake ..
+cmake ..    # or cmake -B/app/build -S/app
 cmake --build .
 ```
 
