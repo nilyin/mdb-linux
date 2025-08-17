@@ -38,7 +38,7 @@ typedef struct mdv_rowset mdv_rowset;
 typedef mdv_rowset *     (*mdv_rowset_retain_fn)    (mdv_rowset *);
 typedef uint32_t         (*mdv_rowset_release_fn)   (mdv_rowset *);
 typedef mdv_table *      (*mdv_rowset_table_fn)     (mdv_rowset *);
-typedef size_t           (*mdv_rowset_append_fn)    (mdv_rowset *, mdv_objid const *, mdv_data const **, size_t);
+typedef size_t           (*mdv_rowset_append_fn)    (mdv_rowset *, mdv_data const **, size_t);
 typedef void             (*mdv_rowset_emplace_fn)   (mdv_rowset *, mdv_rowlist_entry *);
 typedef mdv_enumerator * (*mdv_rowset_enumerator_fn)(mdv_rowset *);
 
@@ -99,7 +99,7 @@ mdv_table * mdv_rowset_table(mdv_rowset *rowset);
  *
  * @return number of appended rows
  */
-size_t mdv_rowset_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count);
+size_t mdv_rowset_append(mdv_rowset *rowset, mdv_data const **rows, size_t count);
 
 
 /**

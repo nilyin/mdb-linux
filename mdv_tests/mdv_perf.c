@@ -146,8 +146,7 @@ void mdv_perf_test_bulk_inserts(void) {
                     { .ptr = &timestamp, .size = sizeof(uint64_t) }
                 };
                 mdv_data const *rows[] = { row };
-                mdv_objid row_id = {0};
-                mdv_rowset_append(rowset, &row_id, rows, 1);
+                mdv_rowset_append(rowset, rows, 1);
             }
             
             mdv_insert(g_client, rowset);

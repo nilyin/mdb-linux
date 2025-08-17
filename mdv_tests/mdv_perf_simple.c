@@ -76,7 +76,7 @@ void test_simple_inserts() {
         };
         mdv_data const *rows[] = { row };
         
-        if (mdv_rowset_append(rowset, NULL, rows, 1) == 1) {
+        if (mdv_rowset_append(rowset, rows, 1) == 1) {
             if (mdv_insert(g_client, rowset) == MDV_OK) {
                 success_count++;
             }

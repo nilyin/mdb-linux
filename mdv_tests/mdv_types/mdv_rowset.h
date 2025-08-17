@@ -30,7 +30,7 @@ MU_TEST(types_rowset)
     mdv_data const row1[] = { { 2, "10" }, { 2, "11" }, { 2, "12" } };
     mdv_data const *rows[] = { row0, row1 };
 
-    mu_check(mdv_rowset_append(rowset, NULL, rows, sizeof rows / sizeof *rows) == sizeof rows / sizeof *rows);
+    mu_check(mdv_rowset_append(rowset, rows, sizeof rows / sizeof *rows) == sizeof rows / sizeof *rows);
 
     mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
 

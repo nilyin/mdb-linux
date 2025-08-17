@@ -95,7 +95,7 @@ static void test_rowset_serialization()
     mdv_data const row1[] = { { 1, "2" }, { 2, "34" }, { sizeof(arr2), arr2 } };
     mdv_data const *rows[] = { row0, row1 };
 
-    mu_check(mdv_rowset_append(rowset, NULL, rows, sizeof rows / sizeof *rows) == sizeof rows / sizeof *rows);
+    mu_check(mdv_rowset_append(rowset, rows, sizeof rows / sizeof *rows) == sizeof rows / sizeof *rows);
 
     binn serialized_rowset;
 

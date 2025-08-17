@@ -76,9 +76,8 @@ int main() {
             { .ptr = &age, .size = sizeof(uint32_t) }
         };
         mdv_data const *rows[] = { row };
-        mdv_objid row_id = {0};
         
-        if (mdv_rowset_append(rowset, &row_id, rows, 1) == 1) {
+        if (mdv_rowset_append(rowset, rows, 1) == 1) {
             if (mdv_insert(client, rowset) == MDV_OK) {
                 success_count++;
                 // Removed verbose logging during transactions

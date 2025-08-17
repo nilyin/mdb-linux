@@ -608,7 +608,7 @@ SWIGINTERN bool mdv_rowset_add(mdv_rowset *self,mdv_datums const *row){
 
         mdv_data const *rows[] = { data };
 
-        mdv_table_release(table);
+        return mdv_rowset_append(self, rows, 1) == 1;
 
         return mdv_rowset_append(self, NULL, rows, 1) == 1;
     }

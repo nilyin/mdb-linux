@@ -68,12 +68,10 @@ typedef struct {} mdv_rows_enumerator;
         }
 
         mdv_data const *rows[] = { data };
-        mdv_objid row_id = {0}; // Initialize with zero/empty row ID
-        mdv_objid const *row_ids[] = { &row_id };
 
         mdv_table_release(table);
 
-        return mdv_rowset_append($self, row_ids[0], rows, 1) == 1;
+        return mdv_rowset_append($self, rows, 1) == 1;
     }
 
     mdv_rows_enumerator * get_enumerator()

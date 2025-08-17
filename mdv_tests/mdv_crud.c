@@ -59,7 +59,7 @@ void create_read_update_delete(void)
 
     mdv_data const *rows[] = { row };
 
-    mu_check(mdv_rowset_append(insert_rowset, NULL, rows, 1) == 1);
+    mu_check(mdv_rowset_append(insert_rowset, rows, 1) == 1);
     mu_check(mdv_insert(client, insert_rowset) == MDV_OK);
     mdv_rowset_release(insert_rowset);
 
@@ -89,7 +89,7 @@ void create_read_update_delete(void)
 
     mdv_data const *update_rows[] = { update_row };
 
-    mu_check(mdv_rowset_append(update_rowset, NULL, update_rows, 1) == 1);
+    mu_check(mdv_rowset_append(update_rowset, update_rows, 1) == 1);
     mu_check(mdv_update(client, table, &row_id, update_rowset) == MDV_OK);
     mdv_rowset_release(update_rowset);
 

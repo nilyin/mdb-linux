@@ -70,7 +70,7 @@ static mdv_table * mdv_rowset_impl_table(mdv_rowset *rowset)
 }
 
 
-static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count)
+static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
 {
     mdv_rowset_impl *impl = (mdv_rowset_impl *)rowset;
     mdv_table_desc const *desc = mdv_table_description(impl->table);
@@ -99,7 +99,7 @@ static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_objid const *row_id
             return appended;
         }
 
-        entry->row_id = row_ids[i];
+        entry->row_id = (mdv_objid){0};
 
         char *dataspace = (char *)(entry->data.fields + cols);
 
@@ -286,7 +286,7 @@ mdv_table * mdv_rowset_table(mdv_rowset *rowset)
 }
 
 
-size_t mdv_rowset_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data const **rows, size_t count)
+size_t mdv_rowset_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
 {
     return rowset->vptr->append(rowset, row_ids, rows, count);
 }

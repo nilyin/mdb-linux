@@ -12,7 +12,9 @@ Client rowsets: In-memory only, don't need persistent IDs
 Server persistence: Row IDs created during WAL processing
 
 Refactoring Plan
-Phase 1: Remove row_ids Parameter
+
+
+1. Phase 1: Remove row_ids Parameter
 Files affected:
 
 mdv_types/mdv_rowset.h
@@ -29,11 +31,8 @@ size_t mdv_rowset_append(mdv_rowset *rowset, mdv_objid const *row_ids, mdv_data 
 // NEW signature  
 size_t mdv_rowset_append(mdv_rowset *rowset, mdv_data const **rows, size_t count);
 
-Copy
 
-Insert at cursor
-c
-Phase 2: Fix mdv_rowset_impl_append (REVISED)
+2. Phase 2: Fix mdv_rowset_impl_append (REVISED)
 File: mdv_types/mdv_rowset.c
 
 Changes:
@@ -48,7 +47,8 @@ Keep all other logic unchanged
 
 Rationale: In-memory rowsets don't need persistent row IDs. IDs are generated later during transaction log processing in mdv_tablespace.c.
 
-Phase 3: Update Client API Calls
+
+3. Phase 3: Update Client API Calls
 File: mdv_api/mdv_client.c
 
 Changes:
@@ -59,11 +59,9 @@ mdv_rowset_append(rowset, NULL, rows, count)
 // NEW call
 mdv_rowset_append(rowset, rows, count)
 
-Copy
 
-Insert at cursor
-c
-Phase 4: Fix Test Cases
+
+4. Phase 4: Fix Test Cases
 Files affected:
 
 mdv_tests/mdv_types/mdv_rowset.h
@@ -78,11 +76,8 @@ mu_check(mdv_rowset_append(rowset, NULL, rows, sizeof rows / sizeof *rows) == si
 // NEW test call
 mu_check(mdv_rowset_append(rowset, rows, sizeof rows / sizeof *rows) == sizeof rows / sizeof *rows);
 
-Copy
 
-Insert at cursor
-c
-Phase 5: Verify Row ID Access (No Changes)
+5. Phase 5: Verify Row ID Access (No Changes)
 Preserve existing functionality:
 
 mdv_enumerator_row_id() - Returns mdv_objid const *
@@ -90,6 +85,7 @@ mdv_enumerator_row_id() - Returns mdv_objid const *
 mdv_delete(mdv_client *client, mdv_table *table, mdv_objid const *row_id) - Unchanged
 
 mdv_update(mdv_client *client, mdv_table *table, mdv_objid const *row_id, mdv_rowset *rowset) - Unchanged
+
 
 Implementation Order
 Update function signatures in header files
