@@ -183,9 +183,8 @@ void mdv_perf_test_single_inserts(void) {
                 { .ptr = &timestamp, .size = sizeof(uint64_t) }
             };
             mdv_data const *rows[] = { row };
-            mdv_objid row_id = {0};
             
-            mdv_rowset_append(rowset, &row_id, rows, 1);
+            mdv_rowset_append(rowset, rows, 1);
             mdv_insert(g_client, rowset);
             mdv_rowset_release(rowset);
         }
@@ -234,9 +233,8 @@ void mdv_perf_test_single_updates(void) {
                 { .ptr = &timestamp, .size = sizeof(uint64_t) }
             };
             mdv_data const *rows[] = { row };
-            mdv_objid update_id = {0};
             
-            mdv_rowset_append(rowset, &update_id, rows, 1);
+            mdv_rowset_append(rowset, rows, 1);
             mdv_update(g_client, g_table, &row_ids[i], rowset);
             mdv_rowset_release(rowset);
         }
@@ -280,9 +278,8 @@ void mdv_perf_test_bulk_updates(void) {
                     { .ptr = &timestamp, .size = sizeof(uint64_t) }
                 };
                 mdv_data const *rows[] = { row };
-                mdv_objid bulk_id = {0};
                 
-                mdv_rowset_append(update_rowset, &bulk_id, rows, 1);
+                mdv_rowset_append(update_rowset, rows, 1);
                 mdv_update(g_client, g_table, &row_id, update_rowset);
                 updates++;
             }
