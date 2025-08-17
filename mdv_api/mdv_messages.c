@@ -270,18 +270,13 @@ bool mdv_msg_select_unbinn(binn const * obj, mdv_msg_select *msg)
         || !binn_object_get_list((void*)obj,   "F", (void**)&fields)
         || !binn_object_get_str((void*)obj,    "S", (char**)&msg->filter))
     {
-        MDV_LOGE("unbinn_insert_into failed");
+        MDV_LOGE("unbinn_select failed");
         return false;
     }
 
     msg->fields = mdv_unbinn_bitset(fields);
 
-    if (!msg->fields)
-    {
-        MDV_LOGE("unbinn_insert_into failed");
-        return false;
-    }
-
+    // It's okay for fields to be NULL, which means all fields are selected
     return true;
 }
 

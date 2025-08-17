@@ -1180,6 +1180,20 @@ bool mdv_binn_bitset(mdv_bitset const *bitset, binn *obj)
         return false;
     }
 
+// When the bitset is NULL, the function:
+// Creates an empty binn list with binn_create_list(obj)
+// Then returns true immediately without adding any data to it
+// So it does create an empty list. An empty list is the correct representation for a NULL bitset (meaning "select all fields") because:
+
+// It's a valid binn structure
+// It contains no bit data, which correctly represents "all fields selected"
+// When deserialized, an empty list correctly results in a NULL bitset
+// The key insight is that an empty list is the proper serialized representation of a NULL bitset, not a list with data. This is why the fix works - it creates an empty list when the bitset is NULL, which then gets properly deserialized as NULL on the server side.
+
+    // Handle NULL bitset case. see comment above
+    if (!bitset)
+        return true;
+
     size_t const capacity = mdv_bitset_capacity(bitset);
     int32_t const *data = (int32_t const *)mdv_bitset_data(bitset);
 
@@ -1199,6 +1213,10 @@ bool mdv_binn_bitset(mdv_bitset const *bitset, binn *obj)
 
 mdv_bitset * mdv_unbinn_bitset(binn const *obj)
 {
+    // Handle NULL input
+    if (!obj)
+        return 0;
+
     size_t const list_len = mdv_binn_list_length(obj);
     size_t const capacity = list_len * MDV_BITSET_ALIGNMENT * CHAR_BIT;
 
