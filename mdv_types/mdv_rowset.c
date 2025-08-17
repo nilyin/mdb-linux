@@ -288,7 +288,7 @@ mdv_table * mdv_rowset_table(mdv_rowset *rowset)
 
 size_t mdv_rowset_append(mdv_rowset *rowset, mdv_data const **rows, size_t count)
 {
-    return rowset->vptr->append(rowset, row_ids, rows, count);
+    return rowset->vptr->append(rowset, rows, count);
 }
 
 
