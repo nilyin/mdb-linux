@@ -105,7 +105,7 @@ static int setup_test_environment(void) {
     if (!g_client) return 0;
     
     mdv_field fields[] = {
-        { MDV_FLD_TYPE_CHAR, 64, "name" },
+        { MDV_FLD_TYPE_CHAR, 0, "name" },
         { MDV_FLD_TYPE_UINT32, 4, "age" },
         { MDV_FLD_TYPE_UINT64, 8, "timestamp" }
     };
@@ -208,17 +208,36 @@ void mdv_perf_test_single_updates(void) {
     
     // Get some row IDs first
     mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+    if (!select_rowset) {
+        printf("Failed to select rows for updates\n");
+        return;
+    }
+    
     mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+    if (!enumerator) {
+        mdv_rowset_release(select_rowset);
+        printf("Failed to create enumerator for updates\n");
+        return;
+    }
     
     mdv_objid *row_ids = malloc(g_config.single_total_updates * sizeof(mdv_objid));
     int row_count = 0;
     
     while (mdv_enumerator_next(enumerator) == MDV_OK && row_count < g_config.single_total_updates) {
-        row_ids[row_count++] = *mdv_enumerator_row_id(enumerator);
+        mdv_objid *id = mdv_enumerator_row_id(enumerator);
+        if (id) {
+            row_ids[row_count++] = *id;
+        }
     }
     
     mdv_enumerator_release(enumerator);
     mdv_rowset_release(select_rowset);
+    
+    if (row_count == 0) {
+        printf("No rows found for updates\n");
+        free(row_ids);
+        return;
+    }
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -226,6 +245,10 @@ void mdv_perf_test_single_updates(void) {
         
         for (int i = 0; i < row_count; i++) {
             mdv_rowset *rowset = mdv_rowset_create(g_table);
+            if (!rowset) {
+                error_count++;
+                continue;
+            }
             
             char name[64] = {0};
             snprintf(name, sizeof(name), "UpdatedUser_%d", i);
