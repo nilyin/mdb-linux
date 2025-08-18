@@ -88,9 +88,10 @@ void mdv_perf_update_metrics(mdv_perf_metrics *total, mdv_perf_metrics *sample) 
     total->sample_count++;
 }
 
-void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics) {
-    printf("✅ %s: %.2f ms avg (%.2f%% CPU, %ld MB)\n", 
-           operation, metrics->avg_time_ms, metrics->avg_cpu_percent, metrics->avg_memory_mb);
+void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count) {
+    double per_op_time = metrics->avg_time_ms / operation_count;
+    printf("✅ %s: %.2f ms total (%.4f ms per operation, %.2f%% CPU, %ld MB)\n", 
+           operation, metrics->avg_time_ms, per_op_time, metrics->avg_cpu_percent, metrics->avg_memory_mb);
 }
 
 static int setup_test_environment(void) {
@@ -160,7 +161,7 @@ void mdv_perf_test_bulk_inserts(void) {
     }
     
     g_test_results[0] = total_metrics;
-    mdv_perf_print_metrics("Bulk Inserts", &total_metrics);
+    mdv_perf_print_metrics("Bulk Inserts", &total_metrics, g_config.bulk_total_inserts);
 }
 
 void mdv_perf_test_single_inserts(void) {
@@ -196,7 +197,7 @@ void mdv_perf_test_single_inserts(void) {
     }
     
     g_test_results[1] = total_metrics;
-    mdv_perf_print_metrics("Single Inserts", &total_metrics);
+    mdv_perf_print_metrics("Single Inserts", &total_metrics, g_config.single_total_inserts);
 }
 
 void mdv_perf_test_single_updates(void) {
@@ -247,7 +248,7 @@ void mdv_perf_test_single_updates(void) {
     
     free(row_ids);
     g_test_results[2] = total_metrics;
-    mdv_perf_print_metrics("Single Updates", &total_metrics);
+    mdv_perf_print_metrics("Single Updates", &total_metrics, row_count);
 }
 
 void mdv_perf_test_bulk_updates(void) {
@@ -296,7 +297,7 @@ void mdv_perf_test_bulk_updates(void) {
     }
     
     g_test_results[3] = total_metrics;
-    mdv_perf_print_metrics("Bulk Updates", &total_metrics);
+    mdv_perf_print_metrics("Bulk Updates", &total_metrics, g_config.bulk_total_updates);
 }
 
 void mdv_perf_test_bulk_reads(void) {
@@ -327,7 +328,7 @@ void mdv_perf_test_bulk_reads(void) {
     }
     
     g_test_results[4] = total_metrics;
-    mdv_perf_print_metrics("Bulk Reads", &total_metrics);
+    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads);
 }
 
 void mdv_perf_test_single_reads(void) {
@@ -356,7 +357,7 @@ void mdv_perf_test_single_reads(void) {
     }
     
     g_test_results[5] = total_metrics;
-    mdv_perf_print_metrics("Single Reads", &total_metrics);
+    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads);
 }
 
 void mdv_perf_test_single_deletes(void) {
@@ -386,7 +387,7 @@ void mdv_perf_test_single_deletes(void) {
     }
     
     g_test_results[6] = total_metrics;
-    mdv_perf_print_metrics("Single Deletes", &total_metrics);
+    mdv_perf_print_metrics("Single Deletes", &total_metrics, g_config.single_total_deletes);
 }
 
 void mdv_perf_test_delete_all(void) {
@@ -413,21 +414,44 @@ void mdv_perf_test_delete_all(void) {
         mdv_perf_update_metrics(&total_metrics, &sample_metrics);
     }
     
+    // Count remaining rows for delete all
+    int delete_count = 0;
+    mdv_rowset *count_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+    if (count_rowset) {
+        mdv_enumerator *count_enum = mdv_rowset_enumerator(count_rowset);
+        while (mdv_enumerator_next(count_enum) == MDV_OK) delete_count++;
+        mdv_enumerator_release(count_enum);
+        mdv_rowset_release(count_rowset);
+    }
+    
     g_test_results[7] = total_metrics;
-    mdv_perf_print_metrics("Delete All", &total_metrics);
+    mdv_perf_print_metrics("Delete All", &total_metrics, delete_count > 0 ? delete_count : 1);
 }
 
 void mdv_perf_print_summary_table(void) {
+    // Operation counts for per-operation calculations
+    int op_counts[] = {
+        g_config.bulk_total_inserts,    // Bulk Inserts
+        g_config.single_total_inserts,  // Single Inserts  
+        g_config.single_total_updates,  // Single Updates
+        g_config.bulk_total_updates,    // Bulk Updates
+        g_config.bulk_total_reads,      // Bulk Reads
+        g_config.single_total_reads,    // Single Reads
+        g_config.single_total_deletes,  // Single Deletes
+        1                               // Delete All (estimated)
+    };
+    
     printf("\n\n=== PERFORMANCE TEST SUMMARY TABLE ===\n");
-    printf("%-15s | %-12s | %-12s | %-12s | %-10s | %-10s | %-10s | %-10s | %-10s | %-10s\n",
-           "Operation", "Min Time(ms)", "Max Time(ms)", "Avg Time(ms)", 
+    printf("%-15s | %-12s | %-12s | %-12s | %-12s | %-10s | %-10s | %-10s | %-10s | %-10s | %-10s\n",
+           "Operation", "Per Op(ms)", "Min Time(ms)", "Max Time(ms)", "Avg Time(ms)", 
            "Min CPU(%)", "Max CPU(%)", "Avg CPU(%)", "Min Mem(MB)", "Max Mem(MB)", "Avg Mem(MB)");
-    printf("----------------+-------------+-------------+-------------+-----------+-----------+-----------+-----------+-----------+-----------\n");
+    printf("----------------+-------------+-------------+-------------+-------------+-----------+-----------+-----------+-----------+-----------+-----------\n");
     
     for (int i = 0; i < 8; i++) {
         mdv_perf_metrics *m = &g_test_results[i];
-        printf("%-15s | %11.2f | %11.2f | %11.2f | %9.2f | %9.2f | %9.2f | %9ld | %9ld | %9ld\n",
-               g_test_names[i], m->min_time_ms, m->max_time_ms, m->avg_time_ms,
+        double per_op_time = m->avg_time_ms / op_counts[i];
+        printf("%-15s | %11.4f | %11.2f | %11.2f | %11.2f | %9.2f | %9.2f | %9.2f | %9ld | %9ld | %9ld\n",
+               g_test_names[i], per_op_time, m->min_time_ms, m->max_time_ms, m->avg_time_ms,
                m->min_cpu_percent, m->max_cpu_percent, m->avg_cpu_percent,
                m->min_memory_mb, m->max_memory_mb, m->avg_memory_mb);
     }

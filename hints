@@ -1,0 +1,6 @@
+# add to devcontainer net-tools:
+sudo apt update
+sudo apt install net-tools
+
+# when use:
+netstat -tulpn
