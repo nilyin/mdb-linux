@@ -106,8 +106,8 @@ static int setup_test_environment(void) {
     
     mdv_field fields[] = {
         { MDV_FLD_TYPE_CHAR, 64, "name" },
-        { MDV_FLD_TYPE_UINT32, 1, "age" },
-        { MDV_FLD_TYPE_UINT64, 1, "timestamp" }
+        { MDV_FLD_TYPE_UINT32, 4, "age" },
+        { MDV_FLD_TYPE_UINT64, 8, "timestamp" }
     };
     
     mdv_table_desc table_desc = {
