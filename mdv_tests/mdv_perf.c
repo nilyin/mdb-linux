@@ -88,10 +88,10 @@ void mdv_perf_update_metrics(mdv_perf_metrics *total, mdv_perf_metrics *sample) 
     total->sample_count++;
 }
 
-void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count) {
+void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count, int error_count) {
     double per_op_time = metrics->avg_time_ms / operation_count;
-    printf("✅ %s: %.2f ms total (%.4f ms per operation, %.2f%% CPU, %ld MB)\n", 
-           operation, metrics->avg_time_ms, per_op_time, metrics->avg_cpu_percent, metrics->avg_memory_mb);
+    printf("✅ %s: %.2f ms total (%.4f ms per operation, %.2f%% CPU, %ld MB, %d errors)\n", 
+           operation, metrics->avg_time_ms, per_op_time, metrics->avg_cpu_percent, metrics->avg_memory_mb, error_count);
 }
 
 static int setup_test_environment(void) {
@@ -128,6 +128,7 @@ static void cleanup_test_environment(void) {
 void mdv_perf_test_bulk_inserts(void) {
     mdv_perf_metrics total_metrics = {0};
     int batches = g_config.bulk_total_inserts / g_config.bulk_batch_size;
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -150,7 +151,7 @@ void mdv_perf_test_bulk_inserts(void) {
                 mdv_rowset_append(rowset, rows, 1);
             }
             
-            mdv_insert(g_client, rowset);
+            if (mdv_insert(g_client, rowset) != MDV_OK) error_count++;
             mdv_rowset_release(rowset);
         }
         
@@ -161,11 +162,12 @@ void mdv_perf_test_bulk_inserts(void) {
     }
     
     g_test_results[0] = total_metrics;
-    mdv_perf_print_metrics("Bulk Inserts", &total_metrics, g_config.bulk_total_inserts);
+    mdv_perf_print_metrics("Bulk Inserts", &total_metrics, g_config.bulk_total_inserts, error_count);
 }
 
 void mdv_perf_test_single_inserts(void) {
     mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -186,7 +188,7 @@ void mdv_perf_test_single_inserts(void) {
             mdv_data const *rows[] = { row };
             
             mdv_rowset_append(rowset, rows, 1);
-            mdv_insert(g_client, rowset);
+            if (mdv_insert(g_client, rowset) != MDV_OK) error_count++;
             mdv_rowset_release(rowset);
         }
         
@@ -197,11 +199,12 @@ void mdv_perf_test_single_inserts(void) {
     }
     
     g_test_results[1] = total_metrics;
-    mdv_perf_print_metrics("Single Inserts", &total_metrics, g_config.single_total_inserts);
+    mdv_perf_print_metrics("Single Inserts", &total_metrics, g_config.single_total_inserts, error_count);
 }
 
 void mdv_perf_test_single_updates(void) {
     mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
     
     // Get some row IDs first
     mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
@@ -236,7 +239,7 @@ void mdv_perf_test_single_updates(void) {
             mdv_data const *rows[] = { row };
             
             mdv_rowset_append(rowset, rows, 1);
-            mdv_update(g_client, g_table, &row_ids[i], rowset);
+            if (mdv_update(g_client, g_table, &row_ids[i], rowset) != MDV_OK) error_count++;
             mdv_rowset_release(rowset);
         }
         
@@ -248,12 +251,13 @@ void mdv_perf_test_single_updates(void) {
     
     free(row_ids);
     g_test_results[2] = total_metrics;
-    mdv_perf_print_metrics("Single Updates", &total_metrics, row_count);
+    mdv_perf_print_metrics("Single Updates", &total_metrics, row_count, error_count);
 }
 
 void mdv_perf_test_bulk_updates(void) {
     mdv_perf_metrics total_metrics = {0};
     int batches = g_config.bulk_total_updates / g_config.bulk_batch_size;
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -263,11 +267,12 @@ void mdv_perf_test_bulk_updates(void) {
             mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
             mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
             
-            mdv_rowset *update_rowset = mdv_rowset_create(g_table);
             int updates = 0;
             
             while (mdv_enumerator_next(enumerator) == MDV_OK && updates < g_config.bulk_batch_size) {
                 mdv_objid row_id = *mdv_enumerator_row_id(enumerator);
+                
+                mdv_rowset *update_rowset = mdv_rowset_create(g_table);
                 
                 char name[64];
                 snprintf(name, sizeof(name), "BulkUpdate_%d_%d", batch, updates);
@@ -281,13 +286,13 @@ void mdv_perf_test_bulk_updates(void) {
                 mdv_data const *rows[] = { row };
                 
                 mdv_rowset_append(update_rowset, rows, 1);
-                mdv_update(g_client, g_table, &row_id, update_rowset);
+                if (mdv_update(g_client, g_table, &row_id, update_rowset) != MDV_OK) error_count++;
+                mdv_rowset_release(update_rowset);
                 updates++;
             }
             
             mdv_enumerator_release(enumerator);
             mdv_rowset_release(select_rowset);
-            mdv_rowset_release(update_rowset);
         }
         
         mdv_perf_monitor_stop(&monitor);
@@ -297,7 +302,7 @@ void mdv_perf_test_bulk_updates(void) {
     }
     
     g_test_results[3] = total_metrics;
-    mdv_perf_print_metrics("Bulk Updates", &total_metrics, g_config.bulk_total_updates);
+    mdv_perf_print_metrics("Bulk Updates", &total_metrics, g_config.bulk_total_updates, error_count);
 }
 
 void mdv_perf_test_bulk_reads(void) {
@@ -328,7 +333,7 @@ void mdv_perf_test_bulk_reads(void) {
     }
     
     g_test_results[4] = total_metrics;
-    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads);
+    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads, 0);
 }
 
 void mdv_perf_test_single_reads(void) {
@@ -357,11 +362,12 @@ void mdv_perf_test_single_reads(void) {
     }
     
     g_test_results[5] = total_metrics;
-    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads);
+    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads, 0);
 }
 
 void mdv_perf_test_single_deletes(void) {
     mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -373,7 +379,7 @@ void mdv_perf_test_single_deletes(void) {
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
                 mdv_objid row_id = *mdv_enumerator_row_id(enumerator);
-                mdv_delete(g_client, g_table, &row_id);
+                if (mdv_delete(g_client, g_table, &row_id) != MDV_OK) error_count++;
             }
             
             mdv_enumerator_release(enumerator);
@@ -387,11 +393,12 @@ void mdv_perf_test_single_deletes(void) {
     }
     
     g_test_results[6] = total_metrics;
-    mdv_perf_print_metrics("Single Deletes", &total_metrics, g_config.single_total_deletes);
+    mdv_perf_print_metrics("Single Deletes", &total_metrics, g_config.single_total_deletes, error_count);
 }
 
 void mdv_perf_test_delete_all(void) {
     mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -402,7 +409,7 @@ void mdv_perf_test_delete_all(void) {
         
         while (mdv_enumerator_next(enumerator) == MDV_OK) {
             mdv_objid row_id = *mdv_enumerator_row_id(enumerator);
-            mdv_delete(g_client, g_table, &row_id);
+            if (mdv_delete(g_client, g_table, &row_id) != MDV_OK) error_count++;
         }
         
         mdv_enumerator_release(enumerator);
@@ -425,7 +432,7 @@ void mdv_perf_test_delete_all(void) {
     }
     
     g_test_results[7] = total_metrics;
-    mdv_perf_print_metrics("Delete All", &total_metrics, delete_count > 0 ? delete_count : 1);
+    mdv_perf_print_metrics("Delete All", &total_metrics, delete_count > 0 ? delete_count : 1, error_count);
 }
 
 void mdv_perf_print_summary_table(void) {

@@ -309,3 +309,39 @@ When a SELECT request is sent from client to server:
 
 This ensures that NULL bitsets (meaning "select all fields") are properly
 handled throughout the client-server communication.
+
+6. Explanation of Row ID + Rowset Design
+The API design requires both row_id and rowset for updates because:
+
+Rowset vs Row ID Concepts:
+mdv_rowset: Contains new data values to be written
+
+It's a data container with field values
+
+Has no knowledge of which specific database row to update
+
+Can contain multiple rows of data
+
+mdv_objid (row_id): Identifies which specific row in the database to target
+
+It's a unique identifier pointing to an existing database record
+
+Contains no data values, just location information
+
+Why Both Are Needed:
+```c
+mdv_update(client, table, &row_id, rowset)
+//                        ↑        ↑
+//                   WHERE clause  SET clause
+
+```
+
+This is equivalent to SQL:
+
+```sql
+UPDATE table SET <rowset_data> WHERE id = <row_id>
+
+```
+row_id: Tells the database "which row to update"
+
+rowset: Tells the database "what new values to set"

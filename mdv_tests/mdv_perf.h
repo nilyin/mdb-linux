@@ -34,7 +34,7 @@ void mdv_perf_monitor_start(mdv_perf_monitor *monitor);
 void mdv_perf_monitor_stop(mdv_perf_monitor *monitor);
 void mdv_perf_calculate_metrics(mdv_perf_monitor *monitor, mdv_perf_metrics *metrics);
 void mdv_perf_update_metrics(mdv_perf_metrics *total, mdv_perf_metrics *sample);
-void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count);
+void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count, int error_count);
 void mdv_perf_print_summary_table(void);
 long mdv_perf_get_memory_usage(void);
 
