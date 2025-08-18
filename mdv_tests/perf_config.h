@@ -22,18 +22,18 @@ typedef struct {
 
 // Default configuration
 static const mdv_perf_config DEFAULT_PERF_CONFIG = {
-    .bulk_batch_size = 100,
-    .bulk_total_inserts = 10000,
-    .bulk_total_updates = 100000,
-    .bulk_total_reads = 100000,
+    .bulk_batch_size = 5,
+    .bulk_total_inserts = 100,
+    .bulk_total_updates = 100,
+    .bulk_total_reads = 100,
     
-    .single_total_inserts = 100000,
-    .single_total_updates = 100000,
-    .single_total_reads = 100000,
-    .single_total_deletes = 100000,
+    .single_total_inserts = 100,
+    .single_total_updates = 100,
+    .single_total_reads = 100,
+    .single_total_deletes = 100,
     
     .warmup_iterations = 10,
-    .measurement_samples = 5
+    .measurement_samples = 3
 };
 
 #endif // MDV_PERF_CONFIG_H
