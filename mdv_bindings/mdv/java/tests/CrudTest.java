@@ -42,9 +42,9 @@ public class CrudTest {
             RowSetEnumerator enumerator = selectRowset.enumerator();
             if (enumerator != null) {
                 try {
-                    // Use backward-compatible moveNext()/current() pattern to work with different binding versions
-                    while (enumerator.moveNext()) {
-                        Row row = enumerator.current();
+                    // Use hasNext()/next() pattern (current SWIG bindings expose these)
+                    while (enumerator.hasNext()) {
+                        Row row = enumerator.next();
                         if (row != null) {
                             String name = row.getString(0);
                             long age = row.getUint32(1);
@@ -54,6 +54,7 @@ public class CrudTest {
                         }
                     }
                 } finally {
+                    // Close the enumerator (native cleanup)
                     enumerator.close();
                 }
             }
