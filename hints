@@ -4,3 +4,46 @@ sudo apt install net-tools
 
 # when use:
 netstat -tulpn
+
+# run java build and tests
+
+#TLDR
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+
+# Commands to run (from build directory, e.g. /app/build)
+
+1. Compile the test into .class files
+mkdir -p java-tests
+javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
+This produces bytecode files such as mdv_bindings/mdv/java/tests/CrudTest.java → java-tests/CrudTest.class
+
+2. Run the compiled class directly (recommended)
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+
+where:
+
+-Djava.library.path points to the directory containing the native JNI library (e.g., libmdv4j.so)
+-cp includes the compiled classes directory and the SWIG-generated binding JAR
+
+2.1 alternative: Package compiled classes into a jar and run with classpath (alternative)
+jar cf java-tests.jar -C java-tests .
+java -Djava.library.path=mdv_bindings/mdv/java -cp mdv_bindings/mdv/java/mdv4j.jar:java-tests.jar CrudTest
+Create an executable JAR (manifest) — if you prefer a single jar
+printf "Main-Class: CrudTest\nClass-Path: mdv4j.jar\n" > manifest.mf
+jar cfm CrudTest.jar manifest.mf -C java-tests .
+Ensure mdv4j.jar is alongside CrudTest.jar (or update Class-Path to point to the correct path).
+Run:
+java -Djava.library.path=mdv_bindings/mdv/java -jar CrudTest.jar
+
+3. Quick diagnostics (if things fail)
+
+Confirm JAR contents (do the mdv classes exist inside the SWIG jar?):
+jar tf mdv_bindings/mdv/java/mdv4j.jar | grep '^mdv/' | sed -n '1,200p'
+If javac says "package mdv does not exist":
+Use the exact jar filename in -cp (maybe mdv4j-1.0.0.jar instead of mdv4j.jar).
+
+Example:
+javac -cp mdv_bindings/mdv/java/mdv4j-1.0.0.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
+If JVM throws UnsatisfiedLinkError: no mdv4j in java.library.path:
+Confirm libmdv4j.so exists: ls -l mdv_bindings/mdv/java
+Ensure JVM arch matches the native lib (java -version and uname -m)

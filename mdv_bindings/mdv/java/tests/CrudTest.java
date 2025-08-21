@@ -12,6 +12,11 @@ public class CrudTest {
         // Connect client (provide DB address)
         Client client = Client.connect(new ClientConfig("tcp://localhost:4800"));
 
+        if(client == null) {
+            System.out.println("Failed to connect to DB");
+            return;
+        }
+
         // Describe table and its fields using the current SWIG API
         TableDesc desc = new TableDesc("users");
         desc.addField(FieldType.MDV_FLD_TYPE_CHAR, 64, "name");
@@ -43,8 +48,8 @@ public class CrudTest {
             if (enumerator != null) {
                 try {
                     // Use hasNext()/next() pattern (current SWIG bindings expose these)
-                    while (enumerator.hasNext()) {
-                        Row row = enumerator.next();
+                    while (enumerator.next()) {
+                        Row row = enumerator.current();
                         if (row != null) {
                             String name = row.getString(0);
                             long age = row.getUint32(1);
@@ -55,10 +60,11 @@ public class CrudTest {
                     }
                 } finally {
                     // Close the enumerator (native cleanup)
-                    enumerator.close();
+                    enumerator.delete();
                 }
             }
             selectRowset.delete();
+            table.delete();
         } else {
             System.out.println("Select returned null");
         }
