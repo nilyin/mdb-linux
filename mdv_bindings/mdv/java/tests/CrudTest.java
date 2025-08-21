@@ -9,8 +9,8 @@ public class CrudTest {
         // Initialize client-side subsystem
         mdv.clientInitialize();
 
-        // Connect client
-        Client client = Client.connect(new ClientConfig());
+        // Connect client (provide DB address)
+        Client client = Client.connect(new ClientConfig("tcp://localhost:4800"));
 
         // Describe table and its fields using the current SWIG API
         TableDesc desc = new TableDesc("users");
@@ -21,27 +21,38 @@ public class CrudTest {
         Table table = client.createTable(desc);
 
         // Insert a row
-        try (RowSet insertRowset = new RowSet(table)) {
+        RowSet insertRowset = new RowSet(table);
+        {
             Row r = new Row(2); // two columns
             r.setString(0, "John Doe");
             r.setUint32(1, 42);
-            insertRowset.add(r);
-
-            // Client.insert returns boolean in current bindings
-            assert client.insert(insertRowset);
+            if (!insertRowset.add(r)) {
+                System.out.println("Failed to add row to RowSet");
+            }
+            r.delete();
         }
+        if (!client.insert(insertRowset)) {
+            System.out.println("Insert failed");
+        }
+        insertRowset.delete();
 
         // Select rows and print the first one
-        RowSet selectRowset = client.mdv_client_select_impl(table, null, "");
-        try (RowSetEnumerator enumerator = selectRowset.get_enumerator()) {
-            if (enumerator.hasNext()) {
-                Row row = enumerator.next();
-                String name = row.getString(0);
-                long age = row.getUint32(1);
-                System.out.println("Found row: name=" + name + ", age=" + age);
-            } else {
-                System.out.println("No rows found");
+        RowSet selectRowset = client.mdv_client_select_impl(table, (BitSet) null, "");
+        if (selectRowset != null) {
+            try (RowSetEnumerator enumerator = selectRowset.enumerator()) {
+                if (enumerator.hasNext()) {
+                    Row row = enumerator.next();
+                    String name = row.getString(0);
+                    long age = row.getUint32(1);
+                    System.out.println("Found row: name=" + name + ", age=" + age);
+                    row.delete();
+                } else {
+                    System.out.println("No rows found");
+                }
             }
+            selectRowset.delete();
+        } else {
+            System.out.println("Select returned null");
         }
 
         // Finalize client-side subsystem
