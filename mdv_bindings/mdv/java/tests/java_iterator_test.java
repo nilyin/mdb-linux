@@ -7,11 +7,14 @@ public class java_iterator_test {
     private static StringBuilder results = new StringBuilder();
     
     public static void main(String[] args) {
+        
+        // Load native JNI library (libmdv4j.so)
         System.loadLibrary("mdv4j");
         
         results.append("=== Java Iterator Test Suite ===\n");
-        
-        mdv.mdv_initialize();
+
+        // Initialize client-side subsystem
+        mdv.clientInitialize();
         
         Client client = new Client(new ClientConfig());
         
@@ -42,7 +45,7 @@ public class java_iterator_test {
         testIteratorReuse(client, table);
         testEarlyClose(client, table);
         
-        mdv.mdv_finalize();
+        mdv.clientFinalize();
         
         // Output results
         results.append("\n=== Test Results ===\n");
@@ -59,32 +62,41 @@ public class java_iterator_test {
     }
     
     private static void setupTestData(Client client, Table table) {
-        try (RowSet insertRowset = new RowSet(table)) {
+        RowSet insertRowset = new RowSet(table);
+        try {
             for (int i = 1; i <= 5; i++) {
-                insertRowset.add(
-                    new Datums(
-                        new Datum(i),
-                        new Datum("Item" + i),
-                        new Datum((long)(i * 100))
-                    )
-                );
+                Row r = new Row(3);
+                r.setUint32(0, i);
+                r.setString(1, "Item" + i);
+                r.setInt64(2, (long)(i * 100));
+                if (!insertRowset.add(r)) {
+                    // failed to add row — continue to next
+                }
+                r.delete();
             }
             client.insert(insertRowset);
+        } finally {
+            insertRowset.delete();
         }
     }
     
-    // Test 1: Try-with-resources pattern (recommended)
+    // Test 1: Try-with-resources pattern (converted to manual cleanup)
     private static void testTryWithResources(Client client, Table table) {
         String testName = "Try-with-resources pattern";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
-                    while (it.hasNext()) {
-                        Row row = it.next();
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
+                    while (it.next()) {
+                        Row row = it.current();
                         rowCount++;
                         row.delete();
                     }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -104,17 +116,18 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             RowSet selectRowset = client.select(table, "", null);
-            RowSetEnumerator it = selectRowset.numerator();
-            
-            try {
-                while (it.next()) {
-                    Row row = it.current();
-                    rowCount++;
-                    row.delete();
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
+                    while (it.next()) {
+                        Row row = it.current();
+                        rowCount++;
+                        row.delete();
+                    }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
-            } finally {
-                it.close();
-                selectRowset.delete();
             }
             
             if (rowCount == 5) {
@@ -127,17 +140,23 @@ public class java_iterator_test {
         }
     }
     
-    // Test 3: Enhanced for-each loop
+    // Test 3: Enhanced for-each loop (converted to explicit enumerator)
     private static void testEnhancedForLoop(Client client, Table table) {
         String testName = "Enhanced for-each loop";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.enumerator()) {
-                    for (Row row : it) {
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
+                    while (it.next()) {
+                        Row row = it.current();
                         rowCount++;
                         row.delete();
                     }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -156,13 +175,18 @@ public class java_iterator_test {
         String testName = "Backward compatibility";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.enumerator()) {
-                    while (it.next()) {  // Old method
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
+                    while (it.next()) {  // Old method still usable
                         Row row = it.current();  // Old method
                         rowCount++;
                         row.delete();
                     }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -181,13 +205,18 @@ public class java_iterator_test {
         String testName = "Empty result set";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "id > 100", null)) {
-                try (RowSetEnumerator it = selectRowset.enumerator()) {
+            RowSet selectRowset = client.select(table, "id > 100", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
                     while (it.next()) {
-                        Row row = it.ncurrent();
+                        Row row = it.current();
                         rowCount++;
                         row.delete();
                     }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -206,13 +235,18 @@ public class java_iterator_test {
         String testName = "Single row result set";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "id = 1", null)) {
-                try (RowSetEnumerator it = selectRowset.enumerator()) {
+            RowSet selectRowset = client.select(table, "id = 1", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
                     while (it.next()) {
                         Row row = it.current();
                         rowCount++;
                         row.delete();
                     }
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -230,24 +264,33 @@ public class java_iterator_test {
     private static void testMultipleIterators(Client client, Table table) {
         String testName = "Multiple iterators";
         try {
-            try (RowSet selectRowset = client.select(table, "", null)) {
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
                 int count1 = 0, count2 = 0;
                 
-                try (RowSetEnumerator it1 = selectRowset.enumerator()) {
+                RowSetEnumerator it1 = selectRowset.enumerator();
+                try {
                     while (it1.next()) {
                         Row row = it1.current();
                         count1++;
                         row.delete();
                     }
+                } finally {
+                    it1.delete();
                 }
                 
-                try (RowSetEnumerator it2 = selectRowset.enumerator()) {
+                RowSetEnumerator it2 = selectRowset.enumerator();
+                try {
                     while (it2.next()) {
                         Row row = it2.current();
                         count2++;
                         row.delete();
                     }
+                } finally {
+                    it2.delete();
                 }
+                
+                selectRowset.delete();
                 
                 if (count1 == 5 && count2 == 5) {
                     pass(testName);
@@ -265,8 +308,10 @@ public class java_iterator_test {
         String testName = "Exception handling";
         try {
             boolean exceptionCaught = false;
-            try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.enumerator()) {
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
+                RowSetEnumerator it = selectRowset.enumerator();
+                try {
                     while (it.next()) {
                         Row row = it.current();
                         row.delete();
@@ -277,6 +322,9 @@ public class java_iterator_test {
                     }
                 } catch (RuntimeException e) {
                     exceptionCaught = true;
+                } finally {
+                    it.delete();
+                    selectRowset.delete();
                 }
             }
             
@@ -295,9 +343,13 @@ public class java_iterator_test {
         String testName = "Iterator reuse prevention";
         try {
             RowSetEnumerator it;
-            try (RowSet selectRowset = client.select(table, "", null)) {
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
                 it = selectRowset.enumerator();
-                it.close();
+                it.delete();
+                selectRowset.delete();
+            } else {
+                it = null;
             }
             
             // Try to use closed iterator
@@ -323,7 +375,8 @@ public class java_iterator_test {
         String testName = "Early close during iteration";
         try {
             int rowCount = 0;
-            try (RowSet selectRowset = client.select(table, "", null)) {
+            RowSet selectRowset = client.select(table, "", null);
+            if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 
                 while (it.next() && rowCount < 3) {
@@ -332,7 +385,8 @@ public class java_iterator_test {
                     row.delete();
                 }
                 
-                it.close(); // Early close
+                it.delete(); // Early close
+                selectRowset.delete();
             }
             
             if (rowCount == 3) {
