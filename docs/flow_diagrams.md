@@ -476,3 +476,31 @@ java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/j
 java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar java_iterator_test
 java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar simple_iterator_test
 java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar JarTest
+
+8. Github CI workflows and build image
+
+Implemented :
+
+Added Android SDK/NDK + helpers to the dev image in Dockerfile. This installs command-line tools, a specific NDK, Android CMake and build-tools, and creates the legacy ndk-bundle symlink expected by your CMake invocation.
+Added a workflow to build & publish the image to GHCR: .github/workflows/build-android-image.yml.
+Updated the Android CI job to run inside the published image: .github/workflows/ccpp.yml.
+Next steps you should perform (one-time)
+
+Confirm GitHub Actions has permission to publish packages:
+Repo Settings → Actions → General → Workflow permissions: ensure GITHUB_TOKEN has packages write permissions (the build workflow uses packages: write).
+Trigger the image build once:
+Open the Actions tab → select "Build & Publish Android Dev Image" → Run workflow (workflow_dispatch).
+This publishes ghcr.io/<owner>/<repo>:android-ndk-latest (the workflow tag is ghcr.io/${{ github.repository }}:android-ndk-latest).
+Re-run your CI (push/rerun) — the Android job will pull the published image and run inside it.
+How to verify externally
+
+After publishing, verify the image exists in Packages → Container registry (GHCR) for the repo.
+Optionally test locally:
+docker pull ghcr.io/<owner>/<repo>:android-ndk-latest
+docker run --rm -it ghcr.io/<owner>/<repo>:android-ndk-latest /bin/bash
+Inside container: ls -la $ANDROID_HOME/ndk-bundle/build/cmake/android.toolchain.cmake
+Notes and recommendations
+
+The build workflow uses buildx and GitHub Actions layer caching (cache-from/cache-to: type=gha) to speed repeated image builds.
+If you want automatic image updates, I can update the build workflow trigger to run on pushes to a branch or on tag creation instead of manual dispatch.
+If the GHCR image should be public vs private, adjust package visibility and permissions accordingly.
