@@ -6,7 +6,7 @@ public class simple_iterator_test {
         System.out.println("=== Simple Java Iterator Test ===");
         
         try {
-            System.loadLibrary("mdv-java");
+            System.loadLibrary("mdv4j");
             System.out.println("✅ PASS: Library loaded successfully");
         } catch (UnsatisfiedLinkError e) {
             System.out.println("❌ FAIL: Library load failed - " + e.getMessage());

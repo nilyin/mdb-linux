@@ -7,7 +7,7 @@ public class java_iterator_test {
     private static StringBuilder results = new StringBuilder();
     
     public static void main(String[] args) {
-        System.loadLibrary("mdv-java");
+        System.loadLibrary("mdv4j");
         
         results.append("=== Java Iterator Test Suite ===\n");
         

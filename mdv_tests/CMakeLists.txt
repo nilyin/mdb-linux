@@ -21,16 +21,16 @@ target_link_libraries(mdv_tests PRIVATE mdv::platform mdv::core mdv::types mdv::
 add_executable(mdv_perf_simple mdv_perf_simple.c)
 target_compile_options(mdv_perf_simple PRIVATE -Wall -Wextra)
 target_include_directories(mdv_perf_simple PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mdv_perf_simple PRIVATE mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)
+target_link_libraries(mdv_perf_simple PRIVATE mdv::api mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)
 
 # Minimal performance test
 add_executable(mdv_perf_minimal mdv_perf_minimal.c)
 target_compile_options(mdv_perf_minimal PRIVATE -Wall -Wextra)
 target_include_directories(mdv_perf_minimal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mdv_perf_minimal PRIVATE mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)
+target_link_libraries(mdv_perf_minimal PRIVATE mdv::api mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)
 
 # Full performance test
 add_executable(mdv_perf mdv_perf_main.c mdv_perf.c)
 target_compile_options(mdv_perf PRIVATE -Wall -Wextra)
 target_include_directories(mdv_perf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mdv_perf PRIVATE mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)
+target_link_libraries(mdv_perf PRIVATE mdv::api mdv::platform mdv::core mdv::types mdv::crypto mdv::storage)

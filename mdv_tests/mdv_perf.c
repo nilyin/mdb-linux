@@ -138,12 +138,12 @@ void mdv_perf_test_bulk_inserts(void) {
             mdv_rowset *rowset = mdv_rowset_create(g_table);
             
             for (int i = 0; i < g_config.bulk_batch_size; i++) {
-                char name[64] = {0};
+                char name[256] = {0};
                 snprintf(name, sizeof(name), "User_%d_%d", batch, i);
                 uint64_t timestamp = (uint64_t)time(NULL) + batch * 1000 + i;
                 
                 mdv_data row[] = {
-                    { .ptr = name, .size = 64 },
+                    { .ptr = name, .size = strlen(name) + 1 },
                     { .ptr = &(uint32_t){ 20 + (i % 50) }, .size = 4 },
                     { .ptr = &timestamp, .size = 8 }
                 };
@@ -176,12 +176,12 @@ void mdv_perf_test_single_inserts(void) {
         for (int i = 0; i < g_config.single_total_inserts; i++) {
             mdv_rowset *rowset = mdv_rowset_create(g_table);
             
-            char name[64] = {0};
+            char name[256] = {0};
             snprintf(name, sizeof(name), "SingleUser_%d", i);
             uint64_t timestamp = (uint64_t)time(NULL) + i;
             
             mdv_data row[] = {
-                { .ptr = name, .size = 64 },
+                { .ptr = name, .size = strlen(name) + 1 },
                 { .ptr = &(uint32_t){ 25 + (i % 40) }, .size = 4 },
                 { .ptr = &timestamp, .size = 8 }
             };
@@ -250,12 +250,12 @@ void mdv_perf_test_single_updates(void) {
                 continue;
             }
             
-            char name[64] = {0};
+            char name[256] = {0};
             snprintf(name, sizeof(name), "UpdatedUser_%d", i);
             uint64_t timestamp = (uint64_t)time(NULL) + i + 1000000;
             
             mdv_data row[] = {
-                { .ptr = name, .size = 64 },
+                { .ptr = name, .size = strlen(name) + 1 },
                 { .ptr = &(uint32_t){ 30 + (i % 35) }, .size = 4 },
                 { .ptr = &timestamp, .size = 8 }
             };
@@ -297,12 +297,12 @@ void mdv_perf_test_bulk_updates(void) {
                 
                 mdv_rowset *update_rowset = mdv_rowset_create(g_table);
                 
-                char name[64] = {0};
+                char name[256] = {0};
                 snprintf(name, sizeof(name), "BulkUpdate_%d_%d", batch, updates);
                 uint64_t timestamp = (uint64_t)time(NULL) + batch * 10000 + updates;
                 
                 mdv_data row[] = {
-                    { .ptr = name, .size = 64 },
+                    { .ptr = name, .size = strlen(name) + 1 },
                     { .ptr = &(uint32_t){ 35 + (updates % 30) }, .size = 4 },
                     { .ptr = &timestamp, .size = 8 }
                 };

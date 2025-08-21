@@ -3,7 +3,7 @@ import mdv.*;
 public class CrudTest {
 
     public static void main(String[] args) {
-        System.loadLibrary("mdv-java");
+        System.loadLibrary("mdv4j");
 
         mdv.mdv_initialize();
 
