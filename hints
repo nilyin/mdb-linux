@@ -5,9 +5,16 @@ sudo apt install net-tools
 # when use:
 netstat -tulpn
 
+# run DB server from root directory
+bash -c "cd build && ./mdv_service/medved --cfg=../assets/conf/medved.conf"
+
+or with tests:
+
+bash -c "cd build && ./mdv_service/medved --cfg=../assets/conf/medved.conf & sleep 5 && ./mdv_tests/mdv_tests"
+
 # run java build and tests
 
-#TLDR
+ #TLDR
 java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
 
 # Commands to run (from build directory, e.g. /app/build)

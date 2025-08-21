@@ -104,11 +104,11 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             RowSet selectRowset = client.select(table, "", null);
-            RowSetEnumerator it = selectRowset.get_enumerator();
+            RowSetEnumerator it = selectRowset.numerator();
             
             try {
-                while (it.hasNext()) {
-                    Row row = it.next();
+                while (it.next()) {
+                    Row row = it.current();
                     rowCount++;
                     row.delete();
                 }
@@ -133,7 +133,7 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
+                try (RowSetEnumerator it = selectRowset.enumerator()) {
                     for (Row row : it) {
                         rowCount++;
                         row.delete();
@@ -157,8 +157,8 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
-                    while (it.moveNext()) {  // Old method
+                try (RowSetEnumerator it = selectRowset.enumerator()) {
+                    while (it.next()) {  // Old method
                         Row row = it.current();  // Old method
                         rowCount++;
                         row.delete();
@@ -182,9 +182,9 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             try (RowSet selectRowset = client.select(table, "id > 100", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
-                    while (it.hasNext()) {
-                        Row row = it.next();
+                try (RowSetEnumerator it = selectRowset.enumerator()) {
+                    while (it.next()) {
+                        Row row = it.ncurrent();
                         rowCount++;
                         row.delete();
                     }
@@ -207,9 +207,9 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             try (RowSet selectRowset = client.select(table, "id = 1", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
-                    while (it.hasNext()) {
-                        Row row = it.next();
+                try (RowSetEnumerator it = selectRowset.enumerator()) {
+                    while (it.next()) {
+                        Row row = it.current();
                         rowCount++;
                         row.delete();
                     }
@@ -233,17 +233,17 @@ public class java_iterator_test {
             try (RowSet selectRowset = client.select(table, "", null)) {
                 int count1 = 0, count2 = 0;
                 
-                try (RowSetEnumerator it1 = selectRowset.get_enumerator()) {
-                    while (it1.hasNext()) {
-                        Row row = it1.next();
+                try (RowSetEnumerator it1 = selectRowset.enumerator()) {
+                    while (it1.next()) {
+                        Row row = it1.current();
                         count1++;
                         row.delete();
                     }
                 }
                 
-                try (RowSetEnumerator it2 = selectRowset.get_enumerator()) {
-                    while (it2.hasNext()) {
-                        Row row = it2.next();
+                try (RowSetEnumerator it2 = selectRowset.enumerator()) {
+                    while (it2.next()) {
+                        Row row = it2.current();
                         count2++;
                         row.delete();
                     }
@@ -266,9 +266,9 @@ public class java_iterator_test {
         try {
             boolean exceptionCaught = false;
             try (RowSet selectRowset = client.select(table, "", null)) {
-                try (RowSetEnumerator it = selectRowset.get_enumerator()) {
-                    while (it.hasNext()) {
-                        Row row = it.next();
+                try (RowSetEnumerator it = selectRowset.enumerator()) {
+                    while (it.next()) {
+                        Row row = it.current();
                         row.delete();
                         // Simulate exception
                         if (row.getUInt32(0) == 3) {
@@ -296,14 +296,14 @@ public class java_iterator_test {
         try {
             RowSetEnumerator it;
             try (RowSet selectRowset = client.select(table, "", null)) {
-                it = selectRowset.get_enumerator();
+                it = selectRowset.enumerator();
                 it.close();
             }
             
             // Try to use closed iterator
             boolean exceptionThrown = false;
             try {
-                it.hasNext();
+                it.next();
             } catch (Exception e) {
                 exceptionThrown = true;
             }
@@ -324,10 +324,10 @@ public class java_iterator_test {
         try {
             int rowCount = 0;
             try (RowSet selectRowset = client.select(table, "", null)) {
-                RowSetEnumerator it = selectRowset.get_enumerator();
+                RowSetEnumerator it = selectRowset.enumerator();
                 
-                while (it.hasNext() && rowCount < 3) {
-                    Row row = it.next();
+                while (it.next() && rowCount < 3) {
+                    Row row = it.current();
                     rowCount++;
                     row.delete();
                 }
