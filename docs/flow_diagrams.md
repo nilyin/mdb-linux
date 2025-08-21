@@ -345,3 +345,134 @@ UPDATE table SET <rowset_data> WHERE id = <row_id>
 row_id: Tells the database "which row to update"
 
 rowset: Tells the database "what new values to set"
+
+# 7. Java build and tests execution
+
+This chapter documents how the Java bindings are produced, what artifacts are generated, how to compile and run the Java tests in this repository, and a short quick-start for developers using the MedvedDB Java client API. The patterns below were validated against the SWIG-generated Java files in the project (see bindings under [`mdv_bindings/mdv/java/`](mdv_bindings/mdv/java/CMakeLists.txt:1)).
+
+7.1 Java artifacts produced by the build
+- mdv4j JAR
+  - Example artifact: [`mdv_bindings/mdv/java/mdv4j-1.0.0.jar`](mdv_bindings/mdv/java/mdv4j-1.0.0.jar:1) (there is also a symlink [`mdv_bindings/mdv/java/mdv4j.jar`](mdv_bindings/mdv/java/mdv4j.jar:1)).
+  - Purpose: contains all SWIG-generated Java classes for the mdv package (Client, Table, Row, RowSet, RowSetEnumerator, Field, FieldType, ObjectId/UUID, BitSet, mdv helper class, mdvJNI, etc.). Put this JAR on the Java -cp when compiling and running tests.
+- Native JNI shared library
+  - Example artifact: [`mdv_bindings/mdv/java/libmdv4j.so`](mdv_bindings/mdv/java/libmdv4j.so:1) (Linux). On macOS the filename will be `libmdv4j.dylib` or `libmdv4j.jnilib`.
+  - Purpose: the native implementation of JNI methods declared in `mdvJNI.java`. The JVM loads it via System.loadLibrary("mdv4j") or by setting -Djava.library.path to the directory containing the file.
+- SWIG-generated Java sources (when SWIG runs)
+  - Location: [`mdv_bindings/mdv/java/`](mdv_bindings/mdv/java/CMakeLists.txt:1)
+  - Purpose: these .java files implement the Java wrapper classes which the JAR packages: [`mdv/Client.class`, `mdv/Row.class`, `mdv/TableDesc.class`, ...`](mdv_bindings/mdv/java/mdv4j-1.0.0.jar:1).
+- Build inputs
+  - SWIG interface file: [`assets/swig/mdv/mdv.i`](assets/swig/mdv/mdv.i:1) and related `.i` files (e.g., [`mdv_client.i`](assets/swig/mdv/mdv_client.i:1), [`mdv_rowset.i`](assets/swig/mdv/mdv_rowset.i:1)).
+  - CMake target that creates the JAR and native library is configured in [`mdv_bindings/mdv/java/CMakeLists.txt`](mdv_bindings/mdv/java/CMakeLists.txt:1). The CMake target names are `mdv_java` (JAR) and `mdv4j` (native library target).
+
+7.2 How to compile and run Java tests (step-by-step)
+Assumption: you have already run the project build (CMake) with JNI enabled and the build artifacts are present under the project `build` directory (e.g. `/app/build` in a devcontainer).
+
+1) Build (CMake + make)
+- From the repository root (or your build directory):
+  - mkdir -p build && cd build
+  - cmake -DBUILD_JNI=ON ..    # optional if root CMake option defaults to ON; safe to pass explicitly (see [`mdv_bindings/mdv/java/CMakeLists.txt`](mdv_bindings/mdv/java/CMakeLists.txt:6))
+  - cmake --build . -- -j4
+  - Result: `mdv4j.jar` (or `mdv4j-<version>.jar`) and `libmdv4j.so` will appear under `build/mdv_bindings/mdv/java/` (see [`mdv_bindings/mdv/java/`](mdv_bindings/mdv/java/CMakeLists.txt:1)).
+
+2) Compile Java test sources
+- From the build directory where the jar exists (example path `build/`):
+  - mkdir -p java-tests
+  - javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
+  - You can compile multiple tests at once:
+    - javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/*.java -d java-tests
+  - Explanation:
+    - -cp includes the generated JAR with the mdv package classes.
+    - -d places compiled .class files under `java-tests/`.
+
+3) Run a test
+- Ensure the JVM can load the native JNI library:
+  - java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+  - Replace `CrudTest` with the test main class you compiled, e.g. `java_iterator_test`, `JarTest`, `simple_iterator_test`.
+  - Notes:
+    - -Djava.library.path must point at the directory containing `libmdv4j.so` so System.loadLibrary("mdv4j") succeeds.
+    - On macOS you may need to set DYLD_LIBRARY_PATH; prefer -Djava.library.path first.
+
+4) Common errors and fixes
+- "package mdv does not exist" during javac
+  - Ensure -cp points to the correct JAR filename and that JAR contains `mdv/` classes (jar tf mdv_bindings/mdv/java/mdv4j.jar | grep '^mdv/').
+- UnsatisfiedLinkError: no mdv4j in java.library.path
+  - Confirm `libmdv4j.so` exists and -Djava.library.path points to the right directory; confirm System.loadLibrary uses `"mdv4j"`.
+- ABI/architecture mismatch (x86_64 vs arm64)
+  - Rebuild the native library for the target architecture or run the matching JVM.
+
+7.3 Quick-start guide: MedvedDB Java client API (minimal examples & patterns)
+This quick-start is distilled from the SWIG-generated API and the official Java sample (`Main.java`) and test updates.
+
+1) Load the JNI library and initialize client subsystem
+- System.loadLibrary("mdv4j");
+- mdv.clientInitialize();
+  - Note: SWIG renamed mdv_initialize() → clientInitialize() in the generated helper class [`mdv.java`](mdv_bindings/mdv/java/mdv.java:15).
+
+2) Create a client (connect)
+- Client client = Client.connect(new ClientConfig("tcp://localhost:4800"));
+  - [`ClientConfig`](mdv_bindings/mdv/java/ClientConfig.java:50) supports an address constructor; the sample uses "tcp://localhost:4800".
+
+3) Create a table description and table
+- TableDesc desc = new TableDesc("users");
+- desc.addField(FieldType.MDV_FLD_TYPE_CHAR, 64, "name");
+- desc.addField(FieldType.MDV_FLD_TYPE_UINT32, 0, "age");
+- Table table = client.createTable(desc);
+- desc.delete(); // free native descriptor
+
+4) Insert rows
+- RowSet rowset = new RowSet(table);
+- Row row = new Row(nCols);
+- row.setString(0, "Alice");
+- row.setUint32(1, 42);
+- rowset.add(row);
+- row.delete(); // free temporary Row if added
+- client.insert(rowset); // returns boolean per bindings
+- rowset.delete();
+
+5) Select rows and iterate
+- RowSet result = client.mdv_client_select_impl(table, null, ""); // or client.select(...)
+- RowSetEnumerator it = result.enumerator(); // or result.get_enumerator()
+- while (it.hasNext()) {
+    Row r = it.next();
+    String name = r.getString(0);
+    long age = r.getUint32(1);
+    r.delete();
+  }
+- it.close(); // or it.delete()
+- result.delete();
+
+6) Cleanup
+- table.delete();
+- client.close();
+- mdv.clientFinalize();
+
+7.4 Mapping: legacy C helpers → current SWIG types (quick reference)
+- Datums / Datum → Row (use Row.setX() methods)
+- Fields / Field(...) constructors → TableDesc.addField(FieldType.*, limit, name)
+- CHAR(32) / UINT32() → FieldType.MDV_FLD_TYPE_CHAR, FieldType.MDV_FLD_TYPE_UINT32 (use FieldType enum)
+- objid → ObjectId (new ObjectId() or methods returning ObjectId)
+- err.MDV_OK → client.insert returns boolean in the current bindings; other native error codes may be exposed via mdvJNI getters if needed
+
+7.5 Where to look in the repository
+- SWIG interface files that control Java output:
+  - [`assets/swig/mdv/mdv.i`](assets/swig/mdv/mdv.i:1)
+  - Related includes: [`assets/swig/mdv/mdv_client.i`](assets/swig/mdv/mdv_client.i:1), [`assets/swig/mdv/mdv_rowset.i`](assets/swig/mdv/mdv_rowset.i:1), etc.
+- CMake build rules for Java bindings:
+  - [`mdv_bindings/mdv/java/CMakeLists.txt`](mdv_bindings/mdv/java/CMakeLists.txt:1)
+- Generated Java binding directory:
+  - [`mdv_bindings/mdv/java/`](mdv_bindings/mdv/java/CMakeLists.txt:1)
+- Example Java sample verified:
+  - [`java/src/main/java/Main.java`](java/src/main/java/Main.java:115) (the sample uses the same patterns: mdv.clientInitialize(), Client.connect(new ClientConfig(...)), TableDesc.addField(), Row/RowSet/RowSetEnumerator patterns)
+
+7.6 Recommended developer checklist
+- Build project with JNI enabled: cmake -DBUILD_JNI=ON .. && cmake --build . -- -jN
+- Confirm artifacts: jar tf build/mdv_bindings/mdv/java/mdv4j.jar | grep '^mdv/'
+- Compile tests with the generated JAR on -cp
+- Run tests with -Djava.library.path pointing at the directory with `libmdv4j.so`
+- If tests fail with missing classes, re-check the generated JAR content and rebuild `mdv_bindings` target
+
+exaample: Run a test (ensure JVM can load native library)
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar java_iterator_test
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar simple_iterator_test
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar JarTest
