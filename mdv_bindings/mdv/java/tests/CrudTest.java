@@ -36,18 +36,25 @@ public class CrudTest {
         }
         insertRowset.delete();
 
-        // Select rows and print the first one
-        RowSet selectRowset = client.mdv_client_select_impl(table, (BitSet) null, "");
+        // Select rows and print the first one (use client.select with BitSet=null)
+        RowSet selectRowset = client.select(table, (BitSet) null, "");
         if (selectRowset != null) {
-            try (RowSetEnumerator enumerator = selectRowset.enumerator()) {
-                if (enumerator.hasNext()) {
-                    Row row = enumerator.next();
-                    String name = row.getString(0);
-                    long age = row.getUint32(1);
-                    System.out.println("Found row: name=" + name + ", age=" + age);
-                    row.delete();
-                } else {
-                    System.out.println("No rows found");
+            RowSetEnumerator enumerator = selectRowset.enumerator();
+            if (enumerator != null) {
+                try {
+                    // Use backward-compatible moveNext()/current() pattern to work with different binding versions
+                    while (enumerator.moveNext()) {
+                        Row row = enumerator.current();
+                        if (row != null) {
+                            String name = row.getString(0);
+                            long age = row.getUint32(1);
+                            System.out.println("Found row: name=" + name + ", age=" + age);
+                            row.delete();
+                            break; // we only needed the first row here
+                        }
+                    }
+                } finally {
+                    enumerator.close();
                 }
             }
             selectRowset.delete();
