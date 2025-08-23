@@ -15,6 +15,12 @@ jobs:
       run: ./mdv_tests/mdv_tests
   build-android:
     runs-on: ubuntu-latest
+    # Allow job to pull package images from GHCR if image is private
+    permissions:
+      contents: read
+      packages: read
+    # Use the prebuilt image published to GHCR by the separate workflow
+    container: ghcr.io/${{ github.repository }}:android-ndk-latest
     strategy:
       matrix:
         abi: [armeabi-v7a, arm64-v8a, x86, x86_64]
