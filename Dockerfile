@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-multilib \
     libc6-dev \
     libc6-dbg \
+    net-tools \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -82,7 +83,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ltrace \
     binutils \
     binutils-dev \
-    libc6-dbg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
