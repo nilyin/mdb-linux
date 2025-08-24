@@ -7,10 +7,11 @@
 ### Core Test Scripts
 | Script | Purpose | Status |
 |--------|---------|--------|
-| `test_data_consistency.{ps1,bat,sh}` | Core components test (Platform, Types, Storage, Crypto) | ✅ **RECOMMENDED** |
-| `run_core_tests.{ps1,bat,sh}` | Core components + server verification | ✅ **RECOMMENDED** |
-| `run_complete_tests.{ps1,bat,sh}` | Complete test suite with integrated server | ✅ **RECOMMENDED** |
-| `run_all_tests_final.{ps1,bat,sh}` | Comprehensive test execution with full verification | ✅ **RECOMMENDED** |
+| `test_data_consistency.{ps1,bat,sh}` | just compiles project and test files (Platform, Types, Storage, Crypto) | ✅ **RECOMMENDED** |
+| `run_core_tests.{ps1,bat,sh}` | compiles project files , runs database server and test connection| ✅ **RECOMMENDED** |
+| `run_complete_tests.{ps1,bat,sh}` | same as before + runs mdv_tests suite and cleans the server | ✅ **RECOMMENDED** |
+| `run_all_tests_final.{ps1,bat,sh}` | same as above, but calling run_full_tests script internally | ✅ **RECOMMENDED** |
+| 'run_full_tests.* | just builds and runs mdv_tests/mdv_tests
 
 ### Build Scripts
 | Script | Purpose | Status |
@@ -18,13 +19,8 @@
 | `incremental_build.{bat,sh}` | Docker incremental build with cache | ✅ **RECOMMENDED** |
 | `docker_build_cache.{bat,sh}` | Generic Docker cache wrapper | ✅ **UTILITY** |
 
-### Legacy Scripts (Deprecated but Maintained)
-| Script | Purpose | Status | Replacement |
-|--------|---------|--------|-------------|
-| `run_tests.{bat,sh}` | Legacy test runner | ⚠️ **DEPRECATED** | `run_complete_tests.{ps1,bat,sh}` |
-| `run_platform_tests.{bat,sh}` | Platform-only tests | ⚠️ **DEPRECATED** | `test_data_consistency.{ps1,bat,sh}` |
-| `smart_test.{bat,sh}` | Multi-purpose test runner | ⚠️ **DEPRECATED** | Use specific scripts |
-| `run_in_docker.sh` | Container entry point | ⚠️ **DEPRECATED** | External Docker scripts |
+
+run_platform_test - just build platfrom file in container - can be deleted
 
 ### Utility Scripts
 | Script | Purpose | Status |
@@ -73,29 +69,6 @@
 - **Usage**: Utility for custom Docker operations
 - **Runtime**: Variable based on command
 
-### 3. Legacy Scripts (Maintained for Compatibility)
-
-#### `run_tests.{bat,sh}`
-- **Status**: ⚠️ **DEPRECATED** - Use `run_complete_tests.{ps1,bat,sh}` instead
-- **Purpose**: Original test runner, now Docker-based
-- **Issues**: Less optimized, verbose output
-
-#### `run_platform_tests.{bat,sh}`
-- **Status**: ⚠️ **DEPRECATED** - Use `test_data_consistency.{ps1,bat,sh}` instead
-- **Purpose**: Platform-only testing
-- **Issues**: Limited scope, less comprehensive
-
-#### `smart_test.{bat,sh}`
-- **Status**: ⚠️ **DEPRECATED** - Use specific scripts instead
-- **Purpose**: Multi-purpose test runner with options
-- **Issues**: Complex interface, now redirects to specific scripts
-
-## Performance Comparison
-
-| Script Type | Initial Build | Incremental Build | Cache Benefits |
-|-------------|---------------|-------------------|----------------|
-| **New Docker Scripts** | 2-4 minutes | 4-6 seconds | ✅ 10x faster |
-| **Legacy Scripts** | 4-8 minutes | 2-4 minutes | ❌ No cache |
 
 ## Recommended Usage Patterns
 
@@ -119,27 +92,12 @@
 
 The following scripts can be safely removed as they are fully replaced:
 
-### Candidates for Removal
-1. **`run_tests.sh`** - Replaced by `run_complete_tests.sh`
-2. **`run_platform_tests.sh`** - Replaced by `test_data_consistency.sh`
-3. **`smart_test.sh`** - Replaced by specific scripts
-4. **`run_in_docker.sh`** - Replaced by external Docker approach
 
 ### Keep for Compatibility
 - All `.bat` and `.ps1` versions should be kept
 - `docker_build_cache.{bat,sh}` - Still useful as utility
 - `docker_publish.{bat,sh}` - Required for Docker Hub publishing
 
-## Migration Guide
-
-### From Legacy to New Scripts
-
-| Old Script | New Script | Benefits |
-|------------|------------|----------|
-| `./run_tests.sh` | `./scripts/run_complete_tests.sh` | 10x faster, better error handling |
-| `./run_platform_tests.sh` | `./scripts/test_data_consistency.sh` | Comprehensive, cached builds |
-| `./smart_test.sh test` | `./scripts/test_data_consistency.sh` | Simpler, more reliable |
-| `./smart_test.sh build` | `./scripts/incremental_build.sh` | Optimized caching |
 
 ### Environment Setup
 ```bash
