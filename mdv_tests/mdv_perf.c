@@ -1,6 +1,6 @@
 #include "mdv_perf.h"
 #include "perf_config.h"
-#include <minunit.h>
+// #include <minunit.h>
 #include <mdv_client.h>
 #include <mdv_log.h>
 #include <mdv_table.h>
@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 // DEFAULT_PERF_CONFIG is provided as a macro in perf_config.h.
 // Initialize g_config at runtime in mdv_run_performance_tests().
