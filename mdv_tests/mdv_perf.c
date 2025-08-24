@@ -293,7 +293,7 @@ void mdv_perf_test_bulk_updates(void) {
             int updates = 0;
             
             while (mdv_enumerator_next(enumerator) == MDV_OK && updates < g_config.bulk_batch_size) {
-                const mdv_objid *id = *mdv_enumerator_row_id(enumerator);
+                const mdv_objid *id = mdv_enumerator_row_id(enumerator);
                 
                 mdv_rowset *update_rowset = mdv_rowset_create(g_table);
                 
@@ -401,7 +401,7 @@ void mdv_perf_test_single_deletes(void) {
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
-                const mdv_objid *id = *mdv_enumerator_row_id(enumerator);
+                const mdv_objid *id = mdv_enumerator_row_id(enumerator);
                 if (mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
             }
             
@@ -431,7 +431,7 @@ void mdv_perf_test_delete_all(void) {
         mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
         
         while (mdv_enumerator_next(enumerator) == MDV_OK) {
-            const mdv_objid *id = *mdv_enumerator_row_id(enumerator);
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
             if (mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
         }
         
