@@ -21,7 +21,7 @@ typedef struct {
 } mdv_perf_config;
 
 // Default configuration
-static const mdv_perf_config DEFAULT_PERF_CONFIG = {
+const mdv_perf_config DEFAULT_PERF_CONFIG = {
     .bulk_batch_size = 5,
     .bulk_total_inserts = 100,
     .bulk_total_updates = 100,

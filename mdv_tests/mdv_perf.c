@@ -11,6 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
+// Use `extern` to declare that g_config is defined elsewhere
+extern const mdv_perf_config DEFAULT_PERF_CONFIG;
 static mdv_client *g_client = NULL;
 static mdv_table *g_table = NULL;
 static const mdv_perf_config g_config = DEFAULT_PERF_CONFIG;
