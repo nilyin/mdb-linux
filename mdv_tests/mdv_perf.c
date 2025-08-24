@@ -11,11 +11,11 @@
 #include <string.h>
 #include <unistd.h>
 
-// Use `extern` to declare that g_config is defined elsewhere
-// extern const mdv_perf_config DEFAULT_PERF_CONFIG;
+// DEFAULT_PERF_CONFIG is provided as a macro in perf_config.h.
+// Initialize g_config at runtime in mdv_run_performance_tests().
 static mdv_client *g_client = NULL;
 static mdv_table *g_table = NULL;
-static const mdv_perf_config g_config = DEFAULT_PERF_CONFIG;
+static mdv_perf_config g_config;
 static mdv_perf_metrics g_test_results[8];
 static const char* g_test_names[] = {
     "Bulk Inserts", "Single Inserts", "Single Updates", "Bulk Updates",
@@ -492,6 +492,11 @@ void mdv_perf_print_summary_table(void) {
 
 void mdv_run_performance_tests(void) {
     printf("=== MedvedDB Performance Test Suite ===\n");
+
+    /* Initialize runtime configuration from the macro-based DEFAULT_PERF_CONFIG.
+       Compound literals/macros cannot be used as compile-time initializers for
+       objects with static storage duration, so we perform assignment at runtime. */
+    g_config = DEFAULT_PERF_CONFIG;
     
     // Clean database before test
     printf("🧹 Cleaning database...\n");

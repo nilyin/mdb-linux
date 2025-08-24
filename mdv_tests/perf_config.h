@@ -20,20 +20,17 @@ typedef struct {
     int measurement_samples;    // Samples for averaging
 } mdv_perf_config;
 
-// Define DEFAULT_PERF_CONFIG as a macro
-#define DEFAULT_PERF_CONFIG { \
-    .bulk_batch_size = 5, \
-    .bulk_total_inserts = 100, \
-    .bulk_total_updates = 100, \
-    .bulk_total_reads = 100, \
-
-    .single_total_inserts = 100, \
-    .single_total_updates = 100, \
-    .single_total_reads = 100, \
-    .single_total_deletes = 100, \
-    
-    .warmup_iterations = 10, \
-    .measurement_samples = 3 \
-};
+#define DEFAULT_PERF_CONFIG (mdv_perf_config){ \
+   .bulk_batch_size = 5, \
+   .bulk_total_inserts = 100, \
+   .bulk_total_updates = 100, \
+   .bulk_total_reads = 100, \
+   .single_total_inserts = 100, \
+   .single_total_updates = 100, \
+   .single_total_reads = 100, \
+   .single_total_deletes = 100, \
+   .warmup_iterations = 10, \
+   .measurement_samples = 3 \
+}
 
 #endif // MDV_PERF_CONFIG_H
