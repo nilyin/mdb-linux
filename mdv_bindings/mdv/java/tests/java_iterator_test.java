@@ -16,19 +16,20 @@ public class java_iterator_test {
         // Initialize client-side subsystem
         mdv.clientInitialize();
         
-        Client client = new Client(new ClientConfig());
+        // Use proper ClientConfig constructor with a configuration string
+        ClientConfig config = new ClientConfig("tcp://127.0.0.1:4800");
+        
+        // Connect to the database
+        Client client = Client.connect(config);
         
         // Setup test table
-        Table table = new Table(
-            new TableDesc(
-                "iterator_test",
-                new Fields(
-                    new Field("id", new UINT32()),
-                    new Field("name", new CHAR(32)),
-                    new Field("value", new INT64())
-                )
-            )
-        );
+        TableDesc tableDesc = new TableDesc("iterator_test");
+        tableDesc.addField(FieldType.MDV_FLD_TYPE_UINT32, 1, "id");
+        tableDesc.addField(FieldType.MDV_FLD_TYPE_CHAR, 32, "name");
+        tableDesc.addField(FieldType.MDV_FLD_TYPE_INT64, 1, "value");
+        
+        // Create the table
+        Table table = client.createTable(tableDesc);
         
         // Insert test data
         setupTestData(client, table);
@@ -85,7 +86,10 @@ public class java_iterator_test {
         String testName = "Try-with-resources pattern";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -115,7 +119,10 @@ public class java_iterator_test {
         String testName = "Manual cleanup pattern";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -145,7 +152,10 @@ public class java_iterator_test {
         String testName = "Enhanced for-each loop";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -175,7 +185,10 @@ public class java_iterator_test {
         String testName = "Backward compatibility";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -205,7 +218,10 @@ public class java_iterator_test {
         String testName = "Empty result set";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "id > 100", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "id > 100");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -235,7 +251,10 @@ public class java_iterator_test {
         String testName = "Single row result set";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "id = 1", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "id = 1");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -264,7 +283,10 @@ public class java_iterator_test {
     private static void testMultipleIterators(Client client, Table table) {
         String testName = "Multiple iterators";
         try {
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 int count1 = 0, count2 = 0;
                 
@@ -308,17 +330,20 @@ public class java_iterator_test {
         String testName = "Exception handling";
         try {
             boolean exceptionCaught = false;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
                     while (it.next()) {
                         Row row = it.current();
-                        row.delete();
-                        // Simulate exception
-                        if (row.getUInt32(0) == 3) {
+                        // Use correct method name (getUint32 instead of getUInt32)
+                        if (row.getUint32(0) == 3) {
                             throw new RuntimeException("Test exception");
                         }
+                        row.delete();
                     }
                 } catch (RuntimeException e) {
                     exceptionCaught = true;
@@ -343,7 +368,10 @@ public class java_iterator_test {
         String testName = "Iterator reuse prevention";
         try {
             RowSetEnumerator it;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 it = selectRowset.enumerator();
                 it.delete();
@@ -375,7 +403,10 @@ public class java_iterator_test {
         String testName = "Early close during iteration";
         try {
             int rowCount = 0;
-            RowSet selectRowset = client.select(table, "", null);
+            // Use BitSet instead of String for the second parameter
+            BitSet bitSet = new BitSet(0);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 
