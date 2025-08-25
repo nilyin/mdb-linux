@@ -118,7 +118,7 @@ To test the Java bindings with CRUD operations:
 
 4. **Compile the test file** using the generated JAR:
    ```bash
-   javac -cp "mdv4j.jar:.\" CrudTest.java
+   javac -cp "mdv4j.jar:." CrudTest.java
    ```
 
 5. **Start the MedvedDB server**:
@@ -150,3 +150,116 @@ pkill -f medved
 * **Containerization**: Docker is used extensively for testing and development environments, providing a consistent setup and build caching.
 * **Documentation**: Doxygen is used for generating documentation from source code comments.
 * **Continuous Integration**: GitHub Actions are used for CI (see `.github/workflows`).
+
+## MedvedDB Server and Enumerator Debugging Summary
+
+### Debugging Approach
+
+To debug the segmentation fault in the MedvedDB server during enumeration operations, we employed several techniques:
+
+1. **Running C Tests Under GDB**:
+   ```bash
+   cd /app/build && gdb -batch -ex "set confirm off" -ex "run --cfg=../assets/conf/medved.conf" -ex "continue" -ex "thread apply all bt" -ex "quit" --args ./mdv_service/medved
+   ```
+
+2. **Running Performance Tests to Trigger Segfault**:
+   ```bash
+   cd /app/build && timeout 30s ./mdv_tests/mdv_perf
+   ```
+
+3. **Analyzing Server Logs**:
+   ```bash
+   cd /app/build && ZF_LOG_LEVEL=verbose ./mdv_tests/mdv_perf 2>&1 | grep -A 50 -B 50 "segfault\|Segmentation\|SIGSEGV"
+   ```
+
+### Debugging Results
+
+Our debugging efforts revealed the following key findings:
+
+1. **Segfault Location**:
+   ```
+   #0  0x000055a3eb371250 in mdv_rowset_enumerator ()
+   #1  0x000055a3eb368c0b in mdv_perf_test_bulk_updates ()
+   #2  0x000055a3eb36a0af in mdv_run_performance_tests ()
+   #3  0x000055a3eb367535 in main ()
+   ```
+
+2. **Server Disconnection**:
+   ```
+   08-24 23:13:58.157 59442 59449 I Peer 0x6 disconnected
+   ```
+
+3. **Client Reconnection Failures**:
+   ```
+   Connection to 'tcp://127.0.0.1:4800' failed
+   ```
+
+4. **Timeout Errors**:
+   ```
+   Response timeout
+   Request sending failed
+   ```
+
+### Root Cause Analysis
+
+The segmentation fault occurs in the `mdv_rowset_enumerator()` function when the server is processing enumeration requests. The sequence of events leading to the crash is:
+
+1. **Client connects** to the MedvedDB server successfully
+2. **Client creates table** and inserts data successfully
+3. **Client performs SELECT operation** which succeeds initially
+4. **Server begins enumeration process** but encounters an issue
+5. **Server crashes** with segmentation fault in `mdv_rowset_enumerator()`
+6. **Client loses connection** to the server ("Peer 0x6 disconnected")
+7. **Client fails to reconnect** to the server
+8. **Subsequent operations fail** with timeout errors
+
+### Likely Issue Location
+
+The issue is most likely in the server-side implementation of the rowset enumerator, specifically in how it handles the enumeration of rows from the database. The crash occurs when:
+
+1. The server is processing a `SELECT` request
+2. The server is trying to create or use a rowset enumerator
+3. There's a memory access violation in the enumerator implementation
+
+### How to Further Narrow Down the Bug
+
+To further narrow down the exact location of the bug, we recommend the following steps:
+
+1. **Run Server with Detailed GDB Tracing**:
+   ```bash
+   cd /app/build && gdb -ex "set confirm off" -ex "handle SIGPIPE nostop noprint" -ex "run --cfg=../assets/conf/medved.conf" -ex "continue" --args ./mdv_service/medved
+   ```
+   Then in another terminal, run the test that triggers the segfault and check the GDB backtrace.
+
+2. **Add Debug Logging to Enumerator Implementation**:
+   - Locate the `mdv_rowset_enumerator()` function in the source code
+   - Add detailed logging statements to trace the execution flow
+   - Specifically log pointer values and memory allocations
+
+3. **Check Memory Management in Enumerator**:
+   - Verify that all pointers are properly initialized before use
+   - Check for potential null pointer dereferences
+   - Ensure proper cleanup of resources
+
+4. **Examine Rowset Implementation**:
+   - Look at how rowsets are created and managed
+   - Check the interaction between rowsets and enumerators
+   - Verify that rowset data is properly populated before enumeration
+
+5. **Review SWIG Interface Definitions**:
+   - Check `/app/assets/swig/mdv/mdv_rowset.i` for correct struct definitions
+   - Ensure the interface correctly maps to the actual C implementation
+   - Verify that method implementations correctly call the underlying C functions
+
+6. **Run Sanitized Builds**:
+   ```bash
+   cd /app/build && cmake -DENABLE_SANITIZER=ON .. && make -j4
+   ```
+   This will enable address sanitizers that can help detect memory issues.
+
+7. **Create Minimal Reproduction Case**:
+   - Write a simple C program that directly calls the problematic functions
+   - Isolate the exact conditions that trigger the segfault
+   - Test with different data sets and configurations
+
+By following these steps, we should be able to pinpoint the exact location of the memory access violation and implement an appropriate fix.
