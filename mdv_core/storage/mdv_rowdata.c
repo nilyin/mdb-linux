@@ -160,6 +160,8 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
 {
     mdv_rowset *rowset = 0;
 
+    mdv_table_desc const *desc = mdv_table_description(table);
+ 
     mdv_table *table_slice = mdv_table_slice(table, fields);
  
     if (!table_slice)
@@ -167,11 +169,6 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
         MDV_LOGE("Table slice failed");
         return 0;
     }
- 
-    /* Use descriptor of the table slice (selected fields) for deserialization.
-       This ensures rows produced by mdv_unbinn_row_slice match the schema
-       expected by the rowset and later by mdv_binn_row() when serializing. */
-    mdv_table_desc const *desc = mdv_table_description(table_slice);
 
     if ((rowset = mdv_rowset_create(table_slice)))
     {

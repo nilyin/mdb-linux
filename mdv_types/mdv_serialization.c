@@ -680,6 +680,21 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
     if (!row_size)
         return 0;
 
+    /* Sanity check: when mask is NULL, the number of list elements should match
+       the number of fields described in table_desc (fields_count). If not, it
+       likely indicates a schema mismatch between encoder and decoder. */
+    if (!mask)
+    {
+        size_t const list_len = mdv_binn_list_length(list);
+        if (list_len != fields_count)
+        {
+            MDV_LOGE("unbinn_row_slice: serialized list length (%zu) != expected fields count (%u). "
+                     "This suggests an encoder/decoder schema mismatch. table_desc=%p size=%u",
+                     list_len, fields_count, (void*)table_desc, table_desc->size);
+            return 0;
+        }
+    }
+
     // Memory allocation for new row
     mdv_rowlist_entry *entry = mdv_alloc(row_size);
 
@@ -709,11 +724,27 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
 
         uint32_t const field_type_size = mdv_field_type_size(fields[n].type);
 
+        if (!field_type_size)
+        {
+            MDV_LOGE("unbinn_row_slice failed. Invalid field type size for field %u (type=%u).", n, fields[n].type);
+            mdv_free(entry);
+            return 0;
+        }
+
         if(fields[n].limit == 1)
         {
+            /* Bound check before writing fixed-size value */
+            if ((size_t)(dataspace + field_type_size - (char*)entry) > row_size)
+            {
+                MDV_LOGE("unbinn_row_slice failed. Fixed field %u exceeds allocated row_size (%zu), need %u bytes.",
+                         n, row_size, field_type_size);
+                mdv_free(entry);
+                return 0;
+            }
+
             if (!binn_get(&value, fields[n].type, dataspace))
             {
-                MDV_LOGE("unbinn_table failed");
+                MDV_LOGE("unbinn_row_slice failed. binn_get returned false for field %u (type=%u).", n, fields[n].type);
                 mdv_free(entry);
                 return 0;
             }
@@ -725,6 +756,23 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         else if (field_type_size == 1)
         {
             int const blob_size = binn_size(&value);
+
+            if (blob_size < 0)
+            {
+                MDV_LOGE("unbinn_row_slice failed. blob size is negative: %d", blob_size);
+                mdv_free(entry);
+                return 0;
+            }
+
+            /* Bound check before memcpy */
+            if ((size_t)(dataspace + blob_size - (char*)entry) > row_size)
+            {
+                MDV_LOGE("unbinn_row_slice failed. Blob field %u (size=%d) exceeds allocated row_size (%zu).",
+                         n, blob_size, row_size);
+                mdv_free(entry);
+                return 0;
+            }
+
             memcpy(dataspace, binn_ptr(&value), blob_size);
             row->fields[field_idx].size = blob_size;
             row->fields[field_idx].ptr = dataspace;
@@ -742,10 +790,18 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
 
             while (binn_list_next(&arr_iter, &arr_value))
             {
+                /* Bound check before each element copy */
+                if ((size_t)(dataspace + field_type_size - (char*)entry) > row_size)
+                {
+                    MDV_LOGE("unbinn_row_slice failed. Array element for field %u would exceed row_size (%zu).", n, row_size);
+                    mdv_free(entry);
+                    return 0;
+                }
+
                 if (!binn_get(&arr_value, fields[n].type, dataspace))
                 {
-                    MDV_LOGE("unbinn_table failed");
-                    mdv_free(row);
+                    MDV_LOGE("unbinn_row_slice failed. binn_get failed for array element of field %u (type=%u).", n, fields[n].type);
+                    mdv_free(entry);
                     return 0;
                 }
 
