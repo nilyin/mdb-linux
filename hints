@@ -15,7 +15,8 @@ bash -c "cd build && ./mdv_service/medved --cfg=../assets/conf/medved.conf & sle
 # run java build and tests
 
  #TLDR
-java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+ a) compile test in java-test/
+ b) java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
 
 # Commands to run (from build directory, e.g. /app/build)
 
@@ -23,6 +24,14 @@ java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/j
 mkdir -p java-tests
 javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
 This produces bytecode files such as mdv_bindings/mdv/java/tests/CrudTest.java → java-tests/CrudTest.class
+
+Explanation:
+-Djava.library.path=mdv_bindings/mdv/java: This is a system property setting. The -D option allows you to define system properties for the Java application. In this case, java.library.path is set to mdv_bindings/mdv/java, which tells the JVM where to find native libraries (like .dll, .so, or .dylib files) that the application might need.
+-cp mdv_bindings/mdv/java/mdv4j.jar:java-tests.jar: The -cp (cp is -classpath) option specifies the classpath, which is a list of locations where the JVM should look for class files and libraries. The classpath can include directories and JAR files. In this case, it includes two paths:
+* mdv_bindings/mdv/java/mdv4j.jar: A JAR file that contains compiled Java classes.
+* java-tests.jar: Another JAR file (or could be a directory) that contains additional classes.
+* The colon (:) is the separator used in Unix-like operating systems (such as Linux and macOS) to separate multiple entries in the classpath. On Windows, the separator would be a semicolon (;
+
 
 2. Run the compiled class directly (recommended)
 java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
@@ -54,3 +63,49 @@ javac -cp mdv_bindings/mdv/java/mdv4j-1.0.0.jar ../mdv_bindings/mdv/java/tests/C
 If JVM throws UnsatisfiedLinkError: no mdv4j in java.library.path:
 Confirm libmdv4j.so exists: ls -l mdv_bindings/mdv/java
 Ensure JVM arch matches the native lib (java -version and uname -m)
+
+
+# using GDB
+
+To run C program with GDB and output debug logs to the console, you can use the command below. Let's break down what each part of the command does and how it works.
+
+
+
+gdb -batch -ex "run" -ex "bt" -ex "quit" --args ./mdv_tests/mdv_tests 2>&1 | grep -A 20 -B 5 "CRUD\|Segmentation\|segfault\|core\|assert"
+gdb: This is the command to start the GNU Debugger.
+
+
+-batch: This option tells GDB to run in batch mode. In this mode, GDB will execute the commands specified with -ex and then exit automatically without entering the interactive mode. This is useful for scripting and automation.
+
+
+-ex "run": This tells GDB to execute the run command, which starts your program.
+
+
+-ex "bt": After the program finishes (either normally or due to a crash), this command tells GDB to execute the bt (backtrace) command, which provides a stack trace of function calls leading up to the point where the program crashed or exited.
+
+
+-ex "quit": This command tells GDB to exit after executing the previous commands.
+
+
+--args ./mdv_tests/mdv_tests: This specifies the program you want to debug (in this case, ./mdv_tests/mdv_tests). The --args option allows you to pass arguments to the program, if needed. In this case, it is just the path to the executable.
+
+
+2>&1: This part redirects the standard error (file descriptor 2) to standard output (file descriptor 1). This means that both the output from the program and any error messages will be sent to the same output stream.
+
+
+|: This pipe symbol takes the output of the command on the left and uses it as the input for the command on the right.
+
+
+grep -A 20 -B 5 "CRUD\|Segmentation\|segfault\|core\|assert": This command filters the output from GDB. The grep command looks for lines that match any of the specified patterns (CRUD, Segmentation, segfault, core, or assert). 
+
+
+-A 20 tells grep to include 20 lines of output after each matching line.
+-B 5 tells grep to include 5 lines of output before each matching line.
+
+Summary of What This Command Does
+It runs your C program under GDB in a non-interactive mode.
+If the program crashes, it captures the backtrace.
+It redirects all output (including errors) to the console.
+It filters the output to show only relevant logs that match the specified patterns, along with some context lines before and after each match.
+Example Usage
+You would run this command in your terminal where your executable is located, and it will output the relevant logs based on the criteria you specified. This is particularly helpful for debugging issues such as segmentation faults or assertions in your code.
