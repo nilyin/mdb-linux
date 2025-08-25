@@ -101,3 +101,52 @@ docker run --rm -p 4800:4800 -v "%cd%":/app -v mdv_build_cache:/app/build -w /ap
 ✅ **Crypto Layer**: Hash functions, data integrity  
 ✅ **CRUD Suite**: Database operations with server (500+ tests, 99.8% success)
 ✅ **Client Compilation**: Fixed missing includes and signatures
+
+### Testing Java Bindings
+
+To test the Java bindings with CRUD operations:
+
+1. **Build the project** to generate SWIG Java bindings and native library:
+   ```bash
+   cd /app && mkdir -p build && cd build && cmake .. && make mdv4j -j4
+   ```
+
+2. **Navigate to the Java bindings directory**:
+   ```bash
+   cd /app/build/mdv_bindings/mdv/java
+   ```
+
+3. **Add package declaration** to the Java test file:
+   ```bash
+   sed -i '1i package mdv;' CrudTest.java
+   ```
+
+4. **Compile the test file** using the generated JAR:
+   ```bash
+   javac -cp "mdv4j.jar:." CrudTest.java
+   ```
+
+5. **Start the MedvedDB server**:
+   ```bash
+   cd /app/build && ./mdv_service/medved --cfg=../assets/conf/medved.conf &
+   ```
+
+6. **Create proper package directory structure** and move the test class file:
+   ```bash
+   cd /app/build/mdv_bindings/mdv/java
+   mkdir -p mdv && mv CrudTest.class mdv/
+   ```
+
+7. **Run the test** with correct classpath and library path:
+   ```bash
+   java -cp ".:mdv4j.jar" -Djava.library.path="." mdv.CrudTest
+   ```
+
+The test will perform all CRUD operations (Create, Read, Update, Delete) with the MedvedDB server. You should see log messages showing "CREATE TABLE", "INSERT INTO", "SELECT", and "FETCH" operations.
+
+Note: The `mdv4j.jar` file already contains all the SWIG-generated Java classes. The `CrudTest.java` is a separate test file that needs to be compiled separately and packaged correctly to work with the generated classes.
+
+To stop the server after testing:
+```bash
+pkill -f medved
+```
