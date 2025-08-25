@@ -46,6 +46,24 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
 
+# Option: make RelWithDebInfo the default build type (keeps optimizations + debug symbols)
+option(DEFAULT_BUILD_TYPE_RELWITHDEBINFO "Set default build type to RelWithDebInfo instead of Release" OFF)
+if (DEFAULT_BUILD_TYPE_RELWITHDEBINFO AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+endif()
+
+# Option: enable -g debug symbols injection into compiler flags (safe, opt-in)
+option(ENABLE_DEBUG_SYMBOLS "Add -g flags to C compiler flags to include debug symbols" OFF)
+
+if (ENABLE_DEBUG_SYMBOLS)
+    message(STATUS "ENABLE_DEBUG_SYMBOLS=ON: adding -g to C compiler flags")
+    # Append -g to global flags and per-configuration flags so debug info is present in produced binaries
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g")
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -g")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -g")
+endif()
+
 
 #*********************************************************
 # determine platform

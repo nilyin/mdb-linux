@@ -150,3 +150,45 @@ To stop the server after testing:
 ```bash
 pkill -f medved
 ```
+
+## Debugging the C server and client with gdb
+
+This project can be built with debug information so you can use gdb to step through the server (medved) and client (mdv).
+
+1) Configure a clean build directory
+- mkdir -p build && cd build
+
+2) Configure with debug symbols (recommended)
+- RelWithDebInfo (optimized + debug info):
+  - cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+- Or full Debug (no optimizations):
+  - cmake -DCMAKE_BUILD_TYPE=Debug ..
+
+3) Alternate: inject -g into Release builds
+- If your scripts use Release by default but you still want symbols:
+  - cmake -DENABLE_DEBUG_SYMBOLS=ON -DCMAKE_BUILD_TYPE=Release ..
+
+4) Build server and client targets
+- cmake --build . --target medved -- -j$(nproc)
+- cmake --build . --target mdv    -- -j$(nproc)
+
+Built binary locations (relative to project root):
+- build/mdv_service/medved
+- build/mdv_client/mdv
+
+5) Verify debug symbols are present
+- file build/mdv_service/medved
+- readelf -S build/mdv_service/medved | grep debug
+  - If you see `.debug_info`, `.debug_abbrev`, etc. the binary contains debug symbols.
+
+6) Run with gdb
+- cd build
+- gdb --args ./mdv_service/medved --cfg=../assets/conf/medved.conf
+- (in gdb) run
+- You can set breakpoints by function name, inspect source-level stack frames and variables when debug symbols are available.
+
+Notes
+- Use RelWithDebInfo for realistic performance with symbols; Debug for easier stepping.
+- The root CMakeLists.txt provides:
+  - `ENABLE_DEBUG_SYMBOLS` option to inject `-g` into compiler flags.
+  - `DEFAULT_BUILD_TYPE_RELWITHDEBINFO` option to set RelWithDebInfo as default (both are OFF by default).
