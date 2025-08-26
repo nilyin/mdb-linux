@@ -180,8 +180,30 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
 
             mdv_rowlist_entry *row = 0;
 
+            // Validate entry data before processing
+            if (!entry->value.ptr || entry->value.size == 0)
+            {
+                MDV_LOGE("Invalid entry data: null pointer or zero size");
+                break;
+            }
+
+            // Additional safety check for reasonable data size
+            if (entry->value.size > 0x1000000) // 16MB limit
+            {
+                MDV_LOGE("Entry data too large: %u bytes", entry->value.size);
+                break;
+            }
+
             if (binn_load(entry->value.ptr, &binn_row))
             {
+                // Validate the loaded binn structure
+                if (!binn_is_valid(&binn_row, NULL, NULL, NULL))
+                {
+                    MDV_LOGE("Invalid binn structure loaded from storage");
+                    binn_free(&binn_row);
+                    break;
+                }
+
                 row = mdv_unbinn_row_slice(&binn_row, desc, fields);
 
                 binn_free(&binn_row);
@@ -194,7 +216,7 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
             }
             else
             {
-                MDV_LOGE("Invalid serialized row");
+                MDV_LOGE("Invalid serialized row: binn_load failed");
                 break;
             }
 

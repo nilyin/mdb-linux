@@ -212,6 +212,13 @@ bool mdv_msg_insert_into_binn(mdv_msg_insert_into const *msg, binn *obj)
 
 bool mdv_msg_insert_into_unbinn(binn const * obj, mdv_msg_insert_into *msg)
 {
+    MDV_LOGI("DEBUG: unbinn_insert_into start, obj=%p, msg=%p", obj, msg);
+    
+    if (!obj || !msg) {
+        MDV_LOGE("DEBUG: NULL pointer - obj=%p, msg=%p", obj, msg);
+        return false;
+    }
+    
     if (0
         || !binn_object_get_uint64((void*)obj, "U0", (uint64 *)(msg->table.u64 + 0))
         || !binn_object_get_uint64((void*)obj, "U1", (uint64 *)(msg->table.u64 + 1))
@@ -220,6 +227,9 @@ bool mdv_msg_insert_into_unbinn(binn const * obj, mdv_msg_insert_into *msg)
         MDV_LOGE("unbinn_insert_into failed");
         return false;
     }
+    
+    MDV_LOGI("DEBUG: unbinn_insert_into success, table=%016llx%016llx, rows=%p", 
+             msg->table.u64[0], msg->table.u64[1], msg->rows);
 
     return true;
 }
@@ -262,6 +272,13 @@ bool mdv_msg_select_binn(mdv_msg_select const *msg, binn *obj)
 
 bool mdv_msg_select_unbinn(binn const * obj, mdv_msg_select *msg)
 {
+    MDV_LOGI("DEBUG: unbinn_select start, obj=%p, msg=%p", obj, msg);
+    
+    if (!obj || !msg) {
+        MDV_LOGE("DEBUG: NULL pointer - obj=%p, msg=%p", obj, msg);
+        return false;
+    }
+    
     binn *fields = 0;
 
     if (0
@@ -273,8 +290,13 @@ bool mdv_msg_select_unbinn(binn const * obj, mdv_msg_select *msg)
         MDV_LOGE("unbinn_select failed");
         return false;
     }
+    
+    MDV_LOGI("DEBUG: unbinn_select parsing fields, fields=%p", fields);
 
     msg->fields = mdv_unbinn_bitset(fields);
+    
+    MDV_LOGI("DEBUG: unbinn_select success, table=%016llx%016llx, filter=%s", 
+             msg->table.u64[0], msg->table.u64[1], msg->filter ? msg->filter : "NULL");
 
     // It's okay for fields to be NULL, which means all fields are selected
     return true;
@@ -343,11 +365,20 @@ bool mdv_msg_fetch_binn(mdv_msg_fetch const *msg, binn *obj)
 
 bool mdv_msg_fetch_unbinn(binn const * obj, mdv_msg_fetch *msg)
 {
+    MDV_LOGI("DEBUG: unbinn_fetch start, obj=%p, msg=%p", obj, msg);
+    
+    if (!obj || !msg) {
+        MDV_LOGE("DEBUG: NULL pointer - obj=%p, msg=%p", obj, msg);
+        return false;
+    }
+    
     if (!binn_object_get_uint32((void*)obj, "V", &msg->id))
     {
         MDV_LOGE("mdv_msg_fetch_unbinn failed");
         return false;
     }
+    
+    MDV_LOGI("DEBUG: unbinn_fetch success, id=%u", msg->id);
 
     return true;
 }

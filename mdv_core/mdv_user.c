@@ -302,6 +302,7 @@ static mdv_errno mdv_user_topology_reply(mdv_user *user, uint16_t id, mdv_msg_to
 static mdv_errno mdv_user_create_table_handler(mdv_msg const *msg, void *arg)
 {
     MDV_LOGI("<<<<< '%s'", mdv_msg_name(msg->hdr.id));
+    MDV_LOGI("DEBUG: msg=%p, payload=%p, size=%u", msg, msg->payload, msg->hdr.size);
 
     mdv_user *user = arg;
 
@@ -312,6 +313,8 @@ static mdv_errno mdv_user_create_table_handler(mdv_msg const *msg, void *arg)
         MDV_LOGW("Message '%s' reading failed", mdv_msg_name(msg->hdr.id));
         return MDV_FAILED;
     }
+    
+    MDV_LOGI("DEBUG: binn_load successful");
 
     mdv_msg_create_table create_table;
 
@@ -422,16 +425,29 @@ static mdv_errno mdv_user_get_table_handler(mdv_msg const *msg, void *arg)
 static mdv_errno mdv_user_insert_into_handler(mdv_msg const *msg, void *arg)
 {
     MDV_LOGI("<<<<< '%s'", mdv_msg_name(msg->hdr.id));
+    MDV_LOGI("DEBUG: msg=%p, payload=%p, size=%u", msg, msg->payload, msg->hdr.size);
 
     mdv_user    *user   = arg;
 
     binn binn_msg;
+    
+    if (!msg->payload) {
+        MDV_LOGE("DEBUG: NULL payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
+    
+    if (msg->hdr.size == 0) {
+        MDV_LOGE("DEBUG: Zero size payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
 
     if(!binn_load(msg->payload, &binn_msg))
     {
         MDV_LOGW("Message '%s' reading failed", mdv_msg_name(msg->hdr.id));
         return MDV_FAILED;
     }
+    
+    MDV_LOGI("DEBUG: binn_load successful");
 
     mdv_msg_insert_into insert_into;
 
@@ -538,16 +554,29 @@ static mdv_errno mdv_user_get_topology_handler(mdv_msg const *msg, void *arg)
 static mdv_errno mdv_user_select_handler(mdv_msg const *msg, void *arg)
 {
     MDV_LOGI("<<<<< '%s'", mdv_msg_name(msg->hdr.id));
+    MDV_LOGI("DEBUG: msg=%p, payload=%p, size=%u", msg, msg->payload, msg->hdr.size);
 
     mdv_user    *user   = arg;
 
     binn binn_msg;
+    
+    if (!msg->payload) {
+        MDV_LOGE("DEBUG: NULL payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
+    
+    if (msg->hdr.size == 0) {
+        MDV_LOGE("DEBUG: Zero size payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
 
     if(!binn_load(msg->payload, &binn_msg))
     {
         MDV_LOGW("Message '%s' reading failed", mdv_msg_name(msg->hdr.id));
         return MDV_FAILED;
     }
+    
+    MDV_LOGI("DEBUG: binn_load successful");
 
     mdv_msg_select select;
 
@@ -592,16 +621,29 @@ static mdv_errno mdv_user_select_handler(mdv_msg const *msg, void *arg)
 static mdv_errno mdv_user_fetch_handler(mdv_msg const *msg, void *arg)
 {
     MDV_LOGI("<<<<< '%s'", mdv_msg_name(msg->hdr.id));
+    MDV_LOGI("DEBUG: msg=%p, payload=%p, size=%u", msg, msg->payload, msg->hdr.size);
 
     mdv_user    *user   = arg;
 
     binn binn_msg;
+    
+    if (!msg->payload) {
+        MDV_LOGE("DEBUG: NULL payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
+    
+    if (msg->hdr.size == 0) {
+        MDV_LOGE("DEBUG: Zero size payload for message '%s'", mdv_msg_name(msg->hdr.id));
+        return MDV_FAILED;
+    }
 
     if(!binn_load(msg->payload, &binn_msg))
     {
         MDV_LOGW("Message '%s' reading failed", mdv_msg_name(msg->hdr.id));
         return MDV_FAILED;
     }
+    
+    MDV_LOGI("DEBUG: binn_load successful");
 
     mdv_msg_fetch fetch;
 
