@@ -601,6 +601,28 @@ mdv_hashmap * mdv_get_routes(mdv_client *client)
 mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
 {
     binn serialized_rows;
+    
+    // Debug: Check rowset before serialization
+    mdv_enumerator *debug_enum = mdv_rowset_enumerator(rowset);
+    if (debug_enum) {
+        int row_count = 0;
+        while (mdv_enumerator_next(debug_enum) == MDV_OK) {
+            mdv_row *row = mdv_enumerator_current(debug_enum);
+            if (row) {
+                MDV_LOGI("DEBUG: INSERT - Row %d: field[0].ptr=%p, field[0].size=%u", 
+                         row_count, row->fields[0].ptr, row->fields[0].size);
+                if (row->fields[0].ptr && row->fields[0].size > 0) {
+                    char name_preview[32] = {0};
+                    size_t copy_len = row->fields[0].size < 31 ? row->fields[0].size : 31;
+                    memcpy(name_preview, row->fields[0].ptr, copy_len);
+                    MDV_LOGI("DEBUG: INSERT - Row %d name: '%s'", row_count, name_preview);
+                }
+            }
+            row_count++;
+        }
+        MDV_LOGI("DEBUG: INSERT - Total rows before serialization: %d", row_count);
+        mdv_enumerator_release(debug_enum);
+    }
 
     if (!mdv_binn_rowset(rowset, &serialized_rows))
         return MDV_FAILED;
@@ -624,6 +646,11 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
 
     binn_free(&serialized_rows);
 
+    // Debug: Check serialized data size
+    size_t serialized_size = binn_size(&serialized_rows);
+    size_t list_len = mdv_binn_list_length(&serialized_rows);
+    MDV_LOGI("DEBUG: INSERT - Serialized rowset: size=%zu, list_len=%zu", serialized_size, list_len);
+    
     mdv_msg req =
     {
         .hdr =
@@ -633,6 +660,8 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
         },
         .payload = binn_ptr(&insert_into_msg)
     };
+    
+    MDV_LOGI("DEBUG: INSERT - Message size: %u", req.hdr.size);
 
     mdv_msg resp;
 

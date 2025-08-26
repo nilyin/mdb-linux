@@ -546,27 +546,24 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
 
     mdv_field const *fields = table_desc->fields;
     
-    // Check if this row has any real data (not all fields are NULL/empty)
-    bool has_real_data = false;
+    // TEMPORARY: Skip completely empty rows (corrupted data from previous runs)
+    // TODO: Clean database and remove this check
+    bool has_any_data = false;
     for(uint32_t i = 0; i < table_desc->size; ++i)
     {
         if (row->fields[i].ptr != NULL && row->fields[i].size > 0) {
-            // Check for valid pointer
-            uintptr_t ptr_val = (uintptr_t)row->fields[i].ptr;
-            if (ptr_val >= 0x1000 && ptr_val <= 0x7fffffffffff && row->fields[i].size <= 0x1000000) {
-                has_real_data = true;
-                break;
-            }
+            has_any_data = true;
+            break;
         }
     }
     
-    if (!has_real_data) {
-        MDV_LOGI("DEBUG: Skipping row with no real data (all fields NULL/empty)");
+    if (!has_any_data) {
+        MDV_LOGI("DEBUG: TEMPORARY - Skipping empty row (corrupted LMDB data)");
         binn_free(list);
-        return false; // Don't serialize empty rows
+        return false;
     }
     
-    MDV_LOGI("DEBUG: Serializing row with real data (table schema has %u fields)", table_desc->size);
+    MDV_LOGI("DEBUG: Serializing row (table schema has %u fields)", table_desc->size);
 
     // Serialize all schema fields, handling missing ones as NULL
     for(uint32_t i = 0; i < table_desc->size; ++i)
@@ -716,6 +713,7 @@ static size_t mdv_calc_row_size(binn const           *list,
             return 0;
         }
 
+        // If mask is NULL, include all fields (select all)
         if (mask && !mdv_bitset_test(mask, n))
         {
             ++n;
@@ -756,10 +754,18 @@ static size_t mdv_calc_row_size(binn const           *list,
                 return 0;
             }
 
+            MDV_LOGI("DEBUG: Blob field %u: blob_size=%d, running_total=%zu", 
+                     n, blob_size, row_size + blob_size);
             row_size += blob_size;
         }
         else
-            row_size += field_type_size * mdv_binn_list_length(&value);
+        {
+            uint32_t array_len = mdv_binn_list_length(&value);
+            size_t array_size = field_type_size * array_len;
+            MDV_LOGI("DEBUG: Array field %u: type_size=%u, array_len=%u, total_size=%zu", 
+                     n, field_type_size, array_len, array_size);
+            row_size += array_size;
+        }
 
         ++n;
         ++*fields_count;
@@ -775,9 +781,15 @@ static size_t mdv_calc_row_size(binn const           *list,
     // Even if some fields are NULL blobs (size=0), we need space for their mdv_data structures
     // The server now pads rows to match table schema, so we must allocate accordingly
     uint32_t const schema_fields = table_desc->size;
+    
+    // Add proper alignment padding for data fields
+    // Each field needs to be properly aligned, so add some extra space
+    size_t alignment_padding = schema_fields * 8; // 8 bytes padding per field for alignment
+    
     row_size += offsetof(mdv_rowlist_entry, data)
                 + offsetof(mdv_row, fields)
-                + sizeof(mdv_data) * schema_fields;
+                + sizeof(mdv_data) * schema_fields
+                + alignment_padding;
     
     // Update fields_count to match schema size for consistent allocation
     *fields_count = schema_fields;
@@ -872,6 +884,7 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
     // Deserialize row
     binn_list_foreach((void*)list, value)
     {
+        // If mask is NULL, include all fields (select all)
         if (mask && !mdv_bitset_test(mask, n))
         {
             ++n;
@@ -938,33 +951,36 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
             }
 
             void *blob_ptr = binn_ptr(&value);
-            if (!blob_ptr && blob_size > 0)
-            {
-                MDV_LOGE("unbinn_row_slice failed. Invalid blob pointer for field %u", n);
-                mdv_free(entry);
-                return 0;
-            }
+            
+            MDV_LOGI("DEBUG: binn_ptr returned %p for field %u, blob_size=%d, binn_value=%p, binn_row=%p", 
+                     blob_ptr, field_idx, blob_size, &value, list);
 
-            MDV_LOGI("DEBUG: binn_ptr returned %p for field %u, blob_size=%d, binn_value=%p", 
-                     blob_ptr, field_idx, blob_size, &value);
-
-            if (blob_size > 0)
+            row->fields[field_idx].size = blob_size;
+            
+            if (blob_size > 0 && blob_ptr)
             {
                 memcpy(dataspace, blob_ptr, blob_size);
-                MDV_LOGI("DEBUG: Copied %d bytes from %p to %p", blob_size, blob_ptr, dataspace);
+                row->fields[field_idx].ptr = dataspace;
+                MDV_LOGI("DEBUG: Copied %d bytes from %p to %p, field_ptr=%p", 
+                         blob_size, blob_ptr, dataspace, row->fields[field_idx].ptr);
+                dataspace += blob_size;
             }
-            row->fields[field_idx].size = blob_size;
-            row->fields[field_idx].ptr = dataspace;
+            else
+            {
+                // For empty blobs, set NULL pointer and don't advance dataspace
+                row->fields[field_idx].ptr = NULL;
+                MDV_LOGI("DEBUG: Set field %u to NULL (blob_size=%d, blob_ptr=%p)", 
+                         field_idx, blob_size, blob_ptr);
+                // Don't advance dataspace for empty blobs
+            }
             
-            MDV_LOGI("DEBUG: Deserialized blob field %u: ptr=%p, size=%d, dataspace=%p, remaining=%ld", 
-                     field_idx, dataspace, blob_size, dataspace, dataspace_end - dataspace);
+            MDV_LOGI("DEBUG: Deserialized blob field %u: ptr=%p, size=%d, dataspace_before=%p, dataspace_after=%p, remaining=%ld", 
+                     field_idx, row->fields[field_idx].ptr, blob_size, dataspace, dataspace + blob_size, dataspace_end - (dataspace + blob_size));
             
             if (dataspace + blob_size > dataspace_end) {
                 MDV_LOGE("DEBUG: Dataspace overflow! dataspace=%p + blob_size=%d > dataspace_end=%p", 
                          dataspace, blob_size, dataspace_end);
             }
-            
-            dataspace += blob_size;
         }
         else
         {
@@ -1456,17 +1472,7 @@ bool mdv_binn_bitset(mdv_bitset const *bitset, binn *obj)
         return false;
     }
 
-// When the bitset is NULL, the function:
-// Creates an empty binn list with binn_create_list(obj)
-// Then returns true immediately without adding any data to it
-// So it does create an empty list. An empty list is the correct representation for a NULL bitset (meaning "select all fields") because:
-
-// It's a valid binn structure
-// It contains no bit data, which correctly represents "all fields selected"
-// When deserialized, an empty list correctly results in a NULL bitset
-// The key insight is that an empty list is the proper serialized representation of a NULL bitset, not a list with data. This is why the fix works - it creates an empty list when the bitset is NULL, which then gets properly deserialized as NULL on the server side.
-
-    // Handle NULL bitset case. see comment above
+    // Handle NULL bitset case - create empty list to represent "select all fields"
     if (!bitset)
         return true;
 
@@ -1494,6 +1500,11 @@ mdv_bitset * mdv_unbinn_bitset(binn const *obj)
         return 0;
 
     size_t const list_len = mdv_binn_list_length(obj);
+    
+    // Handle empty list case - return NULL to represent "select all fields"
+    if (list_len == 0)
+        return 0;
+    
     size_t const capacity = list_len * MDV_BITSET_ALIGNMENT * CHAR_BIT;
 
     mdv_bitset *bitset = mdv_bitset_create(capacity, &mdv_default_allocator);

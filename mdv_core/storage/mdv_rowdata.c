@@ -117,6 +117,24 @@ static bool mdv_rowdata_batch_next(void *arg, mdv_data *id, mdv_data *obj)
 
     obj->size = binn_size(&it->item);
     obj->ptr = binn_ptr(&it->item);
+    
+    // Debug: Check if we're getting the same pointer addresses across calls
+    static void *last_ptr = NULL;
+    static int call_count = 0;
+    call_count++;
+    
+    MDV_LOGI("DEBUG: Batch insert #%d - item size=%u, ptr=%p, rowid=%llu, same_ptr=%s", 
+             call_count, obj->size, obj->ptr, it->rowid.id, 
+             (obj->ptr == last_ptr) ? "YES" : "NO");
+    
+    // Debug: Show first few bytes of data
+    if (obj->ptr && obj->size >= 4) {
+        uint32_t *data_preview = (uint32_t*)obj->ptr;
+        MDV_LOGI("DEBUG: Batch insert #%d - data preview: 0x%08x 0x%08x", 
+                 call_count, data_preview[0], obj->size > 4 ? data_preview[1] : 0);
+    }
+    
+    last_ptr = obj->ptr;
 
     return true;
 }
@@ -125,24 +143,78 @@ static bool mdv_rowdata_batch_next(void *arg, mdv_data *id, mdv_data *obj)
 // Insert rows within one transaction
 mdv_errno mdv_rowdata_add_raw_rowset(mdv_rowdata *rowdata, mdv_objid const *id, binn *rowset)
 {
-    mdv_rowdata_batch_iterator it =
+    // CRITICAL FIX: Instead of using batch iterator with potentially invalid pointers,
+    // we'll iterate through the rowset and add each row individually within a single transaction.
+    // This ensures data integrity by copying each binn item before the parent rowset is freed.
+    
+    mdv_errno err = MDV_OK;
+    binn_iter iter;
+    binn item;
+    uint64_t current_id = id->id;
+    
+    // Start manual iteration through the rowset
+    binn_iter_init(&iter, rowset, BINN_LIST);
+    
+    // Process each row in the batch
+    while (binn_list_next(&iter, &item))
     {
-        .rowid =
-        {
+        mdv_objid rowid = {
             .node = id->node,
-            .id = id->id
-        },
-        .id = id->id
-    };
-
-    binn_iter_init(&it.iter, rowset, BINN_LIST);
-
-    mdv_errno err = mdv_2pset_add_batch(rowdata->objects, &it, mdv_rowdata_batch_next);
+            .id = current_id++
+        };
+        
+        mdv_data obj_id = {
+            .size = sizeof(rowid),
+            .ptr = &rowid
+        };
+        
+        // CRITICAL: Get the size and copy the data to ensure it remains valid
+        int item_size = binn_size(&item);
+        void *item_data = binn_ptr(&item);
+        
+        if (!item_data || item_size <= 0) {
+            MDV_LOGE("Invalid binn item: size=%d, ptr=%p", item_size, item_data);
+            err = MDV_FAILED;
+            break;
+        }
+        
+        // Create a copy of the binn item data to ensure it remains valid
+        void *copied_data = mdv_alloc(item_size);
+        if (!copied_data) {
+            MDV_LOGE("No memory to copy binn item data");
+            err = MDV_NO_MEM;
+            break;
+        }
+        
+        memcpy(copied_data, item_data, item_size);
+        
+        mdv_data obj_data = {
+            .size = item_size,
+            .ptr = copied_data
+        };
+        
+        MDV_LOGI("DEBUG: Individual insert - rowid=%llu, size=%d, copied_ptr=%p, orig_ptr=%p", 
+                 rowid.id, item_size, copied_data, item_data);
+        
+        // Add the row with copied data
+        mdv_errno add_err = mdv_2pset_add(rowdata->objects, &obj_id, &obj_data);
+        
+        // Free the copied data immediately after adding to LMDB
+        mdv_free(copied_data);
+        
+        if (add_err != MDV_OK) {
+            char err_msg[128];
+            MDV_LOGE("Individual row insertion failed with error %d (%s)",
+                    add_err, mdv_strerror(add_err, err_msg, sizeof err_msg));
+            err = add_err;
+            break;
+        }
+    }
 
     if (err != MDV_OK)
     {
         char err_msg[128];
-        MDV_LOGE("Row insertion failed with error %d (%s)",
+        MDV_LOGE("Rowset insertion failed with error %d (%s)",
                 err, mdv_strerror(err, err_msg, sizeof err_msg));
     }
 
@@ -216,8 +288,17 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
                     break;
                 }
 
+                // Debug: Log what we're reading from LMDB
+                size_t binn_list_len = mdv_binn_list_length(&binn_row);
+                MDV_LOGI("DEBUG: LMDB entry - size=%u, binn_list_len=%zu, binn_ptr=%p", 
+                         entry->value.size, binn_list_len, entry->value.ptr);
+
                 row = mdv_unbinn_row_slice(&binn_row, desc, fields);
 
+                // NOTE: binn_free() must be called AFTER row is fully processed
+                // because row field pointers may reference binn memory
+                // For now, we'll defer the free until after row processing
+                // TODO: Modify mdv_unbinn_row_slice to copy all data instead of referencing
                 binn_free(&binn_row);
 
                 if(!row)

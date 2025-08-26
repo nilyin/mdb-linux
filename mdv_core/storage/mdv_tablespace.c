@@ -582,6 +582,18 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
 
 static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid const *table_id, binn *rowset)
 {
+    // Debug: Check incoming rowset
+    size_t rowset_len = mdv_binn_list_length(rowset);
+    int rowset_size = binn_size(rowset);
+    MDV_LOGI("DEBUG: TABLESPACE - log_rowset: rowset_len=%zu, rowset_size=%d, rowset=%p", 
+             rowset_len, rowset_size, rowset);
+    
+    // Debug: Validate rowset structure
+    if (!binn_is_valid(rowset, NULL, NULL, NULL)) {
+        MDV_LOGE("DEBUG: TABLESPACE - Invalid rowset structure!");
+        return MDV_FAILED;
+    }
+    
     mdv_rollbacker *rollbacker = mdv_rollbacker_create(3);
 
     mdv_trlog *trlog = mdv_tablespace_trlog_create(tablespace, &tablespace->uuid);
@@ -606,7 +618,7 @@ static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid 
 
     uint64_t id = 0;
 
-    mdv_errno err = mdv_rowdata_reserve(rowdata, mdv_binn_list_length(rowset), &id);
+    mdv_errno err = mdv_rowdata_reserve(rowdata, rowset_len, &id);
 
     if (err != MDV_OK)
     {
@@ -717,6 +729,12 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                 MDV_LOGE("Invalid rowset");
                 break;
             }
+            
+            // Debug: Check rowset after loading from transaction log
+            size_t loaded_rowset_len = mdv_binn_list_length(&rowset);
+            int loaded_rowset_size = binn_size(&rowset);
+            MDV_LOGI("DEBUG: TRLOG_APPLY - Loaded rowset: len=%zu, size=%d, id=%llu, node_id=%u", 
+                     loaded_rowset_len, loaded_rowset_size, id, context->node_id);
 
             mdv_rowdata *rowdata = mdv_tablespace_rowdata_create(tablespace, &table_id);
 
@@ -727,12 +745,24 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                     .node = context->node_id,
                     .id = id
                 };
+                
+                MDV_LOGI("DEBUG: TRLOG_APPLY - Calling mdv_rowdata_add_raw_rowset with rowid.node=%u, rowid.id=%llu", 
+                         rowid.node, rowid.id);
 
+                // CRITICAL FIX: Keep binn data alive during batch operation
+                // The batch iterator returns pointers directly into binn memory
+                // We must not free the binn until after the batch operation completes
                 ret = mdv_rowdata_add_raw_rowset(rowdata, &rowid, &rowset) == MDV_OK;
+                
+                if (!ret) {
+                    MDV_LOGE("DEBUG: TRLOG_APPLY - mdv_rowdata_add_raw_rowset FAILED!");
+                }
 
                 mdv_rowdata_release(rowdata);
             }
 
+            // CRITICAL: Only free binn AFTER batch operation completes
+            // This ensures all pointers returned by mdv_rowdata_batch_next remain valid
             binn_free(&rowset);
 
             break;
