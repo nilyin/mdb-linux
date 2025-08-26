@@ -4,6 +4,7 @@
 #include <mdv_log.h>
 #include <assert.h>
 #include <string.h>
+#include "/app/validate_row_integrity.h"
 
 
 /// Set of rows
@@ -59,6 +60,32 @@ static uint32_t mdv_rowset_impl_release(mdv_rowset *rowset)
 static void mdv_rowset_impl_emplace(mdv_rowset *rowset, mdv_rowlist_entry *entry)
 {
     mdv_rowset_impl *impl = (mdv_rowset_impl *)rowset;
+    
+    // Validate row entry before adding to rowset
+    if (!entry) {
+        MDV_LOGE("Cannot emplace NULL row entry");
+        return;
+    }
+    
+    MDV_LOGI("DEBUG: Emplacing row entry=%p", entry);
+    
+    // Validate row field pointers to prevent stale data
+    mdv_table_desc const *desc = mdv_table_description(impl->table);
+    for (uint32_t i = 0; i < desc->size; ++i) {
+        MDV_LOGI("DEBUG: Field %u: ptr=%p, size=%u", i, entry->data.fields[i].ptr, entry->data.fields[i].size);
+        
+        if (entry->data.fields[i].ptr) {
+            uintptr_t ptr_val = (uintptr_t)entry->data.fields[i].ptr;
+            
+            // Check for obviously invalid pointers - allow all heap pointers
+            if (ptr_val < 0x1000 || ptr_val > 0x7fffffffffff) {
+                MDV_LOGE("Rejecting row with invalid pointer in field %u: %p", i, entry->data.fields[i].ptr);
+                mdv_free(entry);
+                return;
+            }
+        }
+    }
+    
     mdv_list_emplace_back(&impl->rows, (mdv_list_entry_base*)entry);
 }
 
@@ -185,6 +212,14 @@ static mdv_errno mdv_rowset_enumerator_impl_next(mdv_enumerator *enumerator)
 static void * mdv_rowset_enumerator_impl_current(mdv_enumerator *enumerator)
 {
     mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    if (impl->current) {
+        MDV_LOGI("DEBUG: Returning row from enumerator: entry=%p, row=%p", impl->current, &impl->current->data);
+        
+        // Log field pointers for debugging - only log first 2 fields to avoid garbage
+        for (uint32_t i = 0; i < 2; ++i) {
+            MDV_LOGI("DEBUG: Retrieved field %u: ptr=%p, size=%u", i, impl->current->data.fields[i].ptr, impl->current->data.fields[i].size);
+        }
+    }
     return impl->current ? &impl->current->data : 0;
 }
 

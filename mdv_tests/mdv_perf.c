@@ -291,7 +291,18 @@ void mdv_perf_test_bulk_updates(void) {
         
         for (int batch = 0; batch < batches; batch++) {
             mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+            if (!select_rowset) {
+                MDV_LOGE("SELECT failed, skipping batch %d", batch);
+                error_count++;
+                continue;
+            }
             mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+            if (!enumerator) {
+                MDV_LOGE("Failed to create enumerator for batch %d", batch);
+                mdv_rowset_release(select_rowset);
+                error_count++;
+                continue;
+            }
             
             int updates = 0;
             

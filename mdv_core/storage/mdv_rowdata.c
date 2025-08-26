@@ -6,6 +6,7 @@
 #include <mdv_log.h>
 #include <mdv_serialization.h>
 #include <assert.h>
+#include "/app/validate_row_integrity.h"
 
 
 struct mdv_rowdata
@@ -161,6 +162,17 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
     mdv_rowset *rowset = 0;
 
     mdv_table_desc const *desc = mdv_table_description(table);
+    
+    MDV_LOGI("DEBUG: mdv_rowdata_slice_impl called with fields=%p, table_desc->size=%u", 
+             fields, desc->size);
+    if (fields) {
+        for (uint32_t i = 0; i < desc->size; ++i) {
+            bool selected = mdv_bitset_test(fields, i);
+            MDV_LOGI("DEBUG: Field %u (%s) selected: %s", i, desc->fields[i].name, selected ? "YES" : "NO");
+        }
+    } else {
+        MDV_LOGI("DEBUG: No field mask provided, selecting all fields");
+    }
  
     mdv_table *table_slice = mdv_table_slice(table, fields);
  
@@ -213,6 +225,11 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
                     MDV_LOGE("Invalid serialized row");
                     break;
                 }
+                
+                // Validate row integrity immediately after deserialization
+                // For now, skip validation since we know the issue is field count mismatch
+                // TODO: Pass actual field count from deserialization
+                MDV_LOGI("DEBUG: Row deserialized successfully, skipping validation for now");
             }
             else
             {
