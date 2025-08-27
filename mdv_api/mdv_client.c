@@ -644,9 +644,7 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
         return MDV_FAILED;
     }
 
-    binn_free(&serialized_rows);
-
-    // Debug: Check serialized data size
+    // Debug: Check serialized data size BEFORE freeing
     size_t serialized_size = binn_size(&serialized_rows);
     size_t list_len = mdv_binn_list_length(&serialized_rows);
     MDV_LOGI("DEBUG: INSERT - Serialized rowset: size=%zu, list_len=%zu", serialized_size, list_len);
@@ -657,6 +655,8 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
         mdv_table_release(table);
         return MDV_FAILED;
     }
+    
+    binn_free(&serialized_rows);
     
     mdv_msg req =
     {
