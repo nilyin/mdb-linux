@@ -72,7 +72,9 @@ void create_read_update_delete(void)
 
     mu_check(mdv_enumerator_next(enumerator) == MDV_OK);
 
-    mdv_objid row_id = *mdv_enumerator_row_id(enumerator);
+    const mdv_objid *row_id_ptr = mdv_enumerator_row_id(enumerator);
+    mu_check(row_id_ptr);  // Check for NULL before dereferencing
+    mdv_objid row_id = *row_id_ptr;
 
     mdv_enumerator_release(enumerator);
     mdv_rowset_release(select_rowset);

@@ -4,7 +4,6 @@
 #include <mdv_log.h>
 #include <assert.h>
 #include <string.h>
-// #include "/app/validate_row_integrity.h"
 
 
 /// Set of rows

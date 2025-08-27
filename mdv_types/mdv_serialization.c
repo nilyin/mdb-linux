@@ -778,7 +778,8 @@ static size_t mdv_calc_row_size(binn const           *list,
 
     row_size += offsetof(mdv_rowlist_entry, data)
                 + offsetof(mdv_row, fields)
-                + sizeof(mdv_data) * *fields_count;
+                + sizeof(mdv_data) * *fields_count
+                + 16; // Add minimal safety padding for alignment
     
     MDV_LOGI("DEBUG: Final calculated row_size=%zu (data_size=%zu + overhead=%zu)", 
              row_size, row_size - (offsetof(mdv_rowlist_entry, data) + offsetof(mdv_row, fields) + sizeof(mdv_data) * *fields_count),
@@ -840,6 +841,12 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
     size_t const list_len = mdv_binn_list_length(list);
     MDV_LOGI("DEBUG: Client deserializing row: list_len=%zu, fields_count=%u, table_desc->size=%u", 
              list_len, fields_count, table_desc->size);
+    
+    // Skip empty rows - they should not be processed
+    if (list_len == 0 || fields_count == 0) {
+        MDV_LOGI("DEBUG: Skipping empty row (list_len=%zu, fields_count=%u)", list_len, fields_count);
+        return 0;
+    }
 
     // Memory allocation for new row
     mdv_rowlist_entry *entry = mdv_alloc(row_size);
@@ -945,6 +952,15 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
             
             if (blob_size > 0 && blob_ptr)
             {
+                /* Additional safety check for dataspace overflow */
+                if ((size_t)(dataspace + blob_size - (char*)entry) > row_size)
+                {
+                    MDV_LOGE("CRITICAL: Dataspace overflow prevented - need %d bytes, have %ld",
+                             blob_size, dataspace_end - dataspace);
+                    mdv_free(entry);
+                    return 0;
+                }
+                
                 memcpy(dataspace, blob_ptr, blob_size);
                 row->fields[field_idx].ptr = dataspace;
                 MDV_LOGI("DEBUG: Copied %d bytes from %p to %p, field_ptr=%p", 
