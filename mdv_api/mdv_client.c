@@ -651,6 +651,13 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
     size_t list_len = mdv_binn_list_length(&serialized_rows);
     MDV_LOGI("DEBUG: INSERT - Serialized rowset: size=%zu, list_len=%zu", serialized_size, list_len);
     
+    if (list_len == 0) {
+        MDV_LOGE("CRITICAL: mdv_binn_rowset() failed - empty serialized rowset");
+        binn_free(&serialized_rows);
+        mdv_table_release(table);
+        return MDV_FAILED;
+    }
+    
     mdv_msg req =
     {
         .hdr =

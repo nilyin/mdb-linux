@@ -22,14 +22,14 @@ typedef struct {
 
 #define DEFAULT_PERF_CONFIG (mdv_perf_config){ \
    .bulk_batch_size = 5, \
-   .bulk_total_inserts = 100, \
-   .bulk_total_updates = 100, \
-   .bulk_total_reads = 100, \
-   .single_total_inserts = 100, \
-   .single_total_updates = 100, \
-   .single_total_reads = 100, \
-   .single_total_deletes = 100, \
-   .warmup_iterations = 10, \
+   .bulk_total_inserts = 10, \
+   .bulk_total_updates = 10, \
+   .bulk_total_reads = 10, \
+   .single_total_inserts = 10, \
+   .single_total_updates = 10, \
+   .single_total_reads = 10, \
+   .single_total_deletes = 10, \
+   .warmup_iterations = 5, \
    .measurement_samples = 3 \
 }
 

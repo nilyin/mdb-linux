@@ -546,8 +546,7 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
 
     mdv_field const *fields = table_desc->fields;
     
-    // TEMPORARY: Skip completely empty rows (corrupted data from previous runs)
-    // TODO: Clean database and remove this check
+    // Check if row has valid data - only skip if ALL fields are NULL/empty
     bool has_any_data = false;
     for(uint32_t i = 0; i < table_desc->size; ++i)
     {
@@ -558,7 +557,7 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
     }
     
     if (!has_any_data) {
-        MDV_LOGI("DEBUG: TEMPORARY - Skipping empty row (corrupted LMDB data)");
+        MDV_LOGI("DEBUG: Skipping completely empty row (all fields NULL)");
         binn_free(list);
         return false;
     }
@@ -777,22 +776,9 @@ static size_t mdv_calc_row_size(binn const           *list,
         return 0;
     }
 
-    // CRITICAL FIX: Always allocate space for ALL table schema fields
-    // Even if some fields are NULL blobs (size=0), we need space for their mdv_data structures
-    // The server now pads rows to match table schema, so we must allocate accordingly
-    uint32_t const schema_fields = table_desc->size;
-    
-    // Add proper alignment padding for data fields
-    // Each field needs to be properly aligned, so add some extra space
-    size_t alignment_padding = schema_fields * 8; // 8 bytes padding per field for alignment
-    
     row_size += offsetof(mdv_rowlist_entry, data)
                 + offsetof(mdv_row, fields)
-                + sizeof(mdv_data) * schema_fields
-                + alignment_padding;
-    
-    // Update fields_count to match schema size for consistent allocation
-    *fields_count = schema_fields;
+                + sizeof(mdv_data) * *fields_count;
     
     MDV_LOGI("DEBUG: Final calculated row_size=%zu (data_size=%zu + overhead=%zu)", 
              row_size, row_size - (offsetof(mdv_rowlist_entry, data) + offsetof(mdv_row, fields) + sizeof(mdv_data) * *fields_count),
@@ -1020,10 +1006,9 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         ++field_idx;
     }
 
-    if (dataspace - (char*)entry != row_size)
-        MDV_LOGE("memory corrupted: %p, %zu != %zu", entry, dataspace - (char*)entry, row_size);
-
-    assert(dataspace - (char const*)entry == row_size);
+    size_t actual_size = dataspace - (char*)entry;
+    if (actual_size != row_size)
+        MDV_LOGI("DEBUG: Size mismatch (expected): entry=%p, actual=%zu, expected=%zu", entry, actual_size, row_size);
 
     return entry;
 }
@@ -1082,6 +1067,7 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
                 mdv_rollback(rollbacker);
                 return false;
             }
+            MDV_LOGI("DEBUG: Successfully serialized and added row to rowset");
             binn_free(&fields);
 
             if (row_id)

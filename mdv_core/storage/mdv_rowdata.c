@@ -6,7 +6,7 @@
 #include <mdv_log.h>
 #include <mdv_serialization.h>
 #include <assert.h>
-#include "/app/validate_row_integrity.h"
+// #include "/app/validate_row_integrity.h"
 
 
 struct mdv_rowdata
@@ -195,6 +195,15 @@ mdv_errno mdv_rowdata_add_raw_rowset(mdv_rowdata *rowdata, mdv_objid const *id, 
         
         MDV_LOGI("DEBUG: Individual insert - rowid=%llu, size=%d, copied_ptr=%p, orig_ptr=%p", 
                  rowid.id, item_size, copied_data, item_data);
+        
+        // Debug: Check for pointer reuse (use-after-free indicator)
+        static void *last_orig_ptr = NULL;
+        static int same_ptr_count = 0;
+        if (item_data == last_orig_ptr) {
+            same_ptr_count++;
+            MDV_LOGE("DEBUG: CRITICAL - Same binn_ptr returned %d times: %p", same_ptr_count, item_data);
+        }
+        last_orig_ptr = item_data;
         
         // Add the row with copied data
         mdv_errno add_err = mdv_2pset_add(rowdata->objects, &obj_id, &obj_data);
