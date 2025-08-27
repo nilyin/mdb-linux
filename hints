@@ -109,3 +109,24 @@ It redirects all output (including errors) to the console.
 It filters the output to show only relevant logs that match the specified patterns, along with some context lines before and after each match.
 Example Usage
 You would run this command in your terminal where your executable is located, and it will output the relevant logs based on the criteria you specified. This is particularly helpful for debugging issues such as segmentation faults or assertions in your code.
+
+# debug with log file
+
+```bash
+cd /app/build
+make mdv_tests medved -j4
+
+# Clean database and run test
+rm -rf ./data && mkdir -p ./data
+./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 &
+SERVER_PID=$!
+
+sleep 2
+./mdv_tests/mdv_tests --gtest_filter="*perf*"
+kill $SERVER_PID
+
+# Check if empty rows are still being created
+grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" server.log
+
+
+```

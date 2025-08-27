@@ -588,6 +588,25 @@ static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid 
     MDV_LOGI("DEBUG: TABLESPACE - log_rowset: rowset_len=%zu, rowset_size=%d, rowset=%p", 
              rowset_len, rowset_size, rowset);
     
+    if (rowset_len == 0) {
+        MDV_LOGE("CRITICAL: TABLESPACE received empty rowset from client!");
+        return MDV_FAILED;
+    }
+    
+    // Debug: Validate each row in the received rowset
+    binn_iter iter;
+    binn row_item;
+    int row_idx = 0;
+    binn_list_foreach(rowset, row_item) {
+        size_t row_list_len = mdv_binn_list_length(&row_item);
+        MDV_LOGI("DEBUG: TABLESPACE ROW %d - list_len=%zu, size=%d", 
+                 row_idx, row_list_len, binn_size(&row_item));
+        if (row_list_len == 0) {
+            MDV_LOGE("CRITICAL: TABLESPACE received empty row %d in rowset!", row_idx);
+        }
+        row_idx++;
+    }
+    
     // Debug: Validate rowset structure
     if (!binn_is_valid(rowset, NULL, NULL, NULL)) {
         MDV_LOGE("DEBUG: TABLESPACE - Invalid rowset structure!");

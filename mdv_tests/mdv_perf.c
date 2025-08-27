@@ -140,22 +140,42 @@ void mdv_perf_test_bulk_inserts(void) {
         for (int batch = 0; batch < batches; batch++) {
             mdv_rowset *rowset = mdv_rowset_create(g_table);
             
+            // CRITICAL FIX: Allocate separate storage for each row's numeric values
+            uint32_t *age_values = malloc(g_config.bulk_batch_size * sizeof(uint32_t));
+            uint64_t *timestamp_values = malloc(g_config.bulk_batch_size * sizeof(uint64_t));
+            
             for (int i = 0; i < g_config.bulk_batch_size; i++) {
                 char name[256] = {0};
                 snprintf(name, sizeof(name), "User_%d_%d", batch, i);
-                uint64_t timestamp = (uint64_t)time(NULL) + batch * 1000 + i;
+                
+                age_values[i] = 20 + (i % 50);
+                timestamp_values[i] = (uint64_t)time(NULL) + batch * 1000 + i;
                 
                 mdv_data row[] = {
                     { .ptr = name, .size = strlen(name) + 1 },
-                    { .ptr = &(uint32_t){ 20 + (i % 50) }, .size = 4 },
-                    { .ptr = &timestamp, .size = 8 }
+                    { .ptr = &age_values[i], .size = 4 },
+                    { .ptr = &timestamp_values[i], .size = 8 }
                 };
                 mdv_data const *rows[] = { row };
-                mdv_rowset_append(rowset, rows, 1);
+                
+                // Debug: Validate row data before adding to rowset
+                MDV_LOGI("DEBUG: BULK INSERT - Adding row %d: name='%s', age=%u, timestamp=%lu", 
+                         i, name, age_values[i], timestamp_values[i]);
+                MDV_LOGI("DEBUG: BULK INSERT - Row data pointers: name=%p, age=%p, timestamp=%p", 
+                         row[0].ptr, row[1].ptr, row[2].ptr);
+                
+                size_t added = mdv_rowset_append(rowset, rows, 1);
+                if (added != 1) {
+                    MDV_LOGE("CRITICAL: Failed to add row %d to rowset (added=%zu)", i, added);
+                }
             }
             
             if (mdv_insert(g_client, rowset) != MDV_OK) error_count++;
             mdv_rowset_release(rowset);
+            
+            // Free allocated storage after insert
+            free(age_values);
+            free(timestamp_values);
         }
         
         mdv_perf_monitor_stop(&monitor);
@@ -181,12 +201,18 @@ void mdv_perf_test_single_inserts(void) {
             
             char name[256] = {0};
             snprintf(name, sizeof(name), "SingleUser_%d", i);
-            uint64_t timestamp = (uint64_t)time(NULL) + i;
+            
+            // CRITICAL FIX: Use static storage for numeric values
+            static uint32_t age_value;
+            static uint64_t timestamp_value;
+            
+            age_value = 25 + (i % 40);
+            timestamp_value = (uint64_t)time(NULL) + i;
             
             mdv_data row[] = {
                 { .ptr = name, .size = strlen(name) + 1 },
-                { .ptr = &(uint32_t){ 25 + (i % 40) }, .size = 4 },
-                { .ptr = &timestamp, .size = 8 }
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp_value, .size = 8 }
             };
             mdv_data const *rows[] = { row };
             
@@ -257,9 +283,13 @@ void mdv_perf_test_single_updates(void) {
             snprintf(name, sizeof(name), "UpdatedUser_%d", i);
             uint64_t timestamp = (uint64_t)time(NULL) + i + 1000000;
             
+            // CRITICAL FIX: Use static storage for numeric values
+            static uint32_t age_value;
+            age_value = 30 + (i % 35);
+            
             mdv_data row[] = {
                 { .ptr = name, .size = strlen(name) + 1 },
-                { .ptr = &(uint32_t){ 30 + (i % 35) }, .size = 4 },
+                { .ptr = &age_value, .size = 4 },
                 { .ptr = &timestamp, .size = 8 }
             };
             mdv_data const *rows[] = { row };
@@ -321,9 +351,13 @@ void mdv_perf_test_bulk_updates(void) {
                 snprintf(name, sizeof(name), "BulkUpdate_%d_%d", batch, updates);
                 uint64_t timestamp = (uint64_t)time(NULL) + batch * 10000 + updates;
                 
+                // CRITICAL FIX: Use static storage for numeric values
+                static uint32_t age_value;
+                age_value = 35 + (updates % 30);
+                
                 mdv_data row[] = {
                     { .ptr = name, .size = strlen(name) + 1 },
-                    { .ptr = &(uint32_t){ 35 + (updates % 30) }, .size = 4 },
+                    { .ptr = &age_value, .size = 4 },
                     { .ptr = &timestamp, .size = 8 }
                 };
                 mdv_data const *rows[] = { row };

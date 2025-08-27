@@ -649,6 +649,18 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
     size_t list_len = mdv_binn_list_length(&serialized_rows);
     MDV_LOGI("DEBUG: INSERT - Serialized rowset: size=%zu, list_len=%zu", serialized_size, list_len);
     
+    // Debug: Inspect each row in the binn list
+    binn_iter iter;
+    binn row_binn;
+    int row_idx = 0;
+    binn_list_foreach(&serialized_rows, row_binn) {
+        int row_field_count = binn_count(&row_binn);
+        int row_size = binn_size(&row_binn);
+        MDV_LOGI("DEBUG: INSERT - Serialized row %d: field_count=%d, size=%d", 
+                 row_idx, row_field_count, row_size);
+        row_idx++;
+    }
+    
     if (list_len == 0) {
         MDV_LOGE("CRITICAL: mdv_binn_rowset() failed - empty serialized rowset");
         binn_free(&serialized_rows);
