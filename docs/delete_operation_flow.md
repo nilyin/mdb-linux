@@ -150,3 +150,63 @@ Next steps should focus on:
 4. Iteratively improving based on performance metrics
 
 The MedvedDB DELETE operation provides a solid foundation for distributed data management, but with these optimizations, it can achieve performance parity with other CRUD operations.
+
+## Table Not Found Problem Analysis
+
+### Problem Description
+During performance testing of DELETE operations, a critical issue was observed where the server reports "Table not found" errors despite the client sending valid SELECT requests with correct table IDs.
+
+### Symptoms
+1. **Client-Server ID Mismatch**: Client sends SELECT requests with table ID `2a4b14b66ce97758edc0dae76f7cfcb8` (as shown in server logs: "unbinn_select success, table=2a4b14b66ce97758edc0dae76f7cfcb8")
+2. **Server Error**: Server attempts to access table ID `5877E96CB6144B2AB8FC7C6FE7DAC0ED` and fails with "Selection request failed for table '5877E96CB6144B2AB8FC7C6FE7DAC0ED' with error 'Table not found'"
+3. **Operation Success**: Despite the error, the handler returns "Operation successfully completed" (err=1)
+4. **Pattern**: Occurs consistently during bulk SELECT operations following DELETE operations
+
+### Root Cause Hypothesis
+The server appears to be using an incorrect table ID during operation execution, potentially due to:
+- Server-side caching of table references from previous test runs
+- Incorrect table ID mapping or resolution during operation processing
+- State persistence issues between server restarts
+- Race conditions in table ID handling during concurrent operations
+
+## Research Plan: Table ID Mismatch Investigation
+
+### Phase 1: Serialization Pipeline Analysis
+1. **Client Serialization**: Trace table ID flow from [`mdv_dbclient_select()`](mdv_api/mdv_client.c) through message serialization
+2. **Network Transmission**: Verify binn serialization/deserialization preserves table IDs correctly
+3. **Server Deserialization**: Check [`mdv_user_select_handler()`](mdv_core/mdv_user.c) for proper table ID extraction
+
+### Phase 2: Server-Side Table Resolution
+1. **Table Cache Analysis**: Investigate server-side table caching mechanisms in [`mdv_core`](mdv_core/)
+2. **ID Mapping**: Check if server maintains internal table ID mappings that might become stale
+3. **State Persistence**: Examine server in-memory state management between operations
+
+### Phase 3: Operation Execution Flow
+1. **Handler to Storage**: Trace table ID from message handler to storage layer operations
+2. **Context Switching**: Investigate if operation context incorrectly switches table references
+3. **Concurrency Issues**: Check for race conditions in table reference handling
+
+### Phase 4: Client-Server Synchronization
+1. **Session Management**: Review client-server session state and table reference synchronization
+2. **UUID Generation**: Verify table UUID generation and consistency between client and server
+3. **Clean State Testing**: Test with fresh server instances to isolate state persistence issues
+
+### Investigation Tools & Techniques
+1. **Enhanced Logging**: Add detailed table ID tracing throughout the serialization and execution pipeline
+2. **Debug Builds**: Create instrumented builds with additional validation checks
+3. **Packet Analysis**: Use network packet inspection to verify transmitted table IDs
+4. **Memory Inspection**: Examine server memory for table cache contents during operation execution
+
+### Expected Outcomes
+1. Identification of the precise location where table ID substitution occurs
+2. Understanding of server state management and caching behavior
+3. Resolution plan for ensuring table ID consistency throughout operation execution
+4. Recommendations for server architecture improvements to prevent similar issues
+
+### Immediate Actions
+1. Restart server between test runs to eliminate state persistence issues
+2. Add client-side logging of table IDs used in each operation
+3. Implement server-side validation to verify table existence before operation execution
+4. Create minimal reproduction case to isolate the problem from performance test complexity
+
+This research plan will systematically identify where the server incorrectly substitutes table IDs and provide the foundation for implementing robust fixes to ensure table ID consistency throughout the operation pipeline.
