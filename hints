@@ -25,7 +25,7 @@ grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" se
 
 
 # terminal 2
-- rebuilt project with debag info:
+- rebuilt project with debug info:
 ```
 cd build
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
@@ -40,7 +40,11 @@ gdb ./mdv_tests/mdv_perf
 ./mdv_tests/mdv_tests --gtest_filter="*perf*"
 ```
 
+# one commander:
+```
+bash -c "./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 & SERVER_PID=\$! && sleep 3 && ./mdv_tests/mdv_perf 2>&1 | head -50 && kill \$SERVER_PID"
 
+```
 
 # add to devcontainer net-tools:
 ```

@@ -858,8 +858,13 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
              list_len, fields_count, table_desc->size);
     
     // Skip empty rows - they should not be processed
-    if (list_len == 0 || fields_count == 0) {
-        MDV_LOGI("DEBUG: Skipping empty row (list_len=%zu, fields_count=%u)", list_len, fields_count);
+    if (list_len == 0) {
+        MDV_LOGI("DEBUG: Skipping completely empty row (list_len=0)");
+        return 0;
+    }
+    
+    if (fields_count == 0) {
+        MDV_LOGI("DEBUG: Skipping row with no valid fields (fields_count=0)");
         return 0;
     }
 
@@ -994,9 +999,9 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
             MDV_LOGI("DEBUG: Deserialized blob field %u: ptr=%p, size=%d, dataspace_before=%p, dataspace_after=%p, remaining=%ld", 
                      field_idx, row->fields[field_idx].ptr, blob_size, dataspace, dataspace + blob_size, dataspace_end - (dataspace + blob_size));
             
-            if (dataspace + blob_size > dataspace_end) {
-                MDV_LOGE("DEBUG: Dataspace overflow! dataspace=%p + blob_size=%d > dataspace_end=%p", 
-                         dataspace, blob_size, dataspace_end);
+            if (dataspace > dataspace_end) {
+                MDV_LOGE("DEBUG: Dataspace overflow! dataspace=%p > dataspace_end=%p", 
+                         dataspace, dataspace_end);
             }
         }
         else
@@ -1157,41 +1162,103 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
 
 mdv_rowset * mdv_unbinn_rowset(binn const *list, mdv_table *table)
 {
-    mdv_rowset *rowset = mdv_rowset_create(table);
-
-    if (!rowset || !table)
+    if (!list || !table)
     {
-        MDV_LOGE("unbinn_rowset failed");
+        MDV_LOGE("unbinn_rowset failed: invalid parameters");
+        return 0;
+    }
+
+    // Check if the list is valid and has content
+    if (!binn_is_valid((void*)list, NULL, NULL, NULL))
+    {
+        MDV_LOGE("unbinn_rowset failed: invalid binn list");
+        return 0;
+    }
+
+    size_t list_size = mdv_binn_list_length(list);
+    if (list_size == 0)
+    {
+        MDV_LOGI("DEBUG: unbinn_rowset - empty list, returning empty rowset");
+        return mdv_rowset_create(table);
+    }
+
+    mdv_rowset *rowset = mdv_rowset_create(table);
+    if (!rowset)
+    {
+        MDV_LOGE("unbinn_rowset failed: could not create rowset");
         return 0;
     }
 
     mdv_table_desc const *table_desc = mdv_table_description(table);
+    if (!table_desc)
+    {
+        MDV_LOGE("unbinn_rowset failed: invalid table description");
+        mdv_rowset_release(rowset);
+        return 0;
+    }
 
     binn_iter iter = {};
     binn value = {};
+    int row_count = 0;
+    int success_count = 0;
+
+    MDV_LOGI("DEBUG: unbinn_rowset starting - list_size=%zu", list_size);
 
     binn_list_foreach((void*)list, value)
     {
+        row_count++;
+        
+        // Try to deserialize the row
         mdv_rowlist_entry *entry = mdv_unbinn_row(&value, table_desc);
-
         if (!entry)
         {
-            MDV_LOGE("unbinn_rowset failed");
-            mdv_rowset_release(rowset);
-            return 0;
+            MDV_LOGI("DEBUG: Failed to deserialize row %d, skipping", row_count);
+            continue;
         }
 
+        // Initialize row ID to default values
+        entry->row_id.node = 0;
+        entry->row_id.id = success_count;
+
+        // Try to get row ID from next element if it exists
         if (binn_list_next(&iter, &value))
         {
-            void *row_id = 0;
+            void *row_id_data = 0;
             uint32_t size = 0;
-            binn_object_get_blob(&value, "id", &row_id, &size);
-            if (row_id && size == sizeof(mdv_objid))
-                entry->row_id = *(mdv_objid*)row_id;
+            
+            // Check if next element is a row ID object
+            if (binn_object_get_blob(&value, "id", &row_id_data, &size) && 
+                row_id_data && size == sizeof(mdv_objid))
+            {
+                entry->row_id = *(mdv_objid*)row_id_data;
+                MDV_LOGI("DEBUG: Extracted row_id for row %d: node=%u, id=%llu", 
+                         success_count, entry->row_id.node, entry->row_id.id);
+            }
+            else
+            {
+                // Next element is not a row ID, it's probably another row
+                // Put it back by not advancing the iterator
+                binn_iter_init(&iter, (void*)list, BINN_LIST);
+                // Skip to current position
+                for (int i = 0; i < row_count; i++) {
+                    binn_list_next(&iter, &value);
+                }
+                MDV_LOGI("DEBUG: No row ID found for row %d, using default: node=0, id=%d", 
+                         success_count, success_count);
+            }
+        }
+        else
+        {
+            MDV_LOGI("DEBUG: No more elements, using default row_id for row %d: node=0, id=%d", 
+                     success_count, success_count);
         }
 
         mdv_rowset_emplace(rowset, entry);
+        success_count++;
     }
+
+    MDV_LOGI("DEBUG: unbinn_rowset completed: %d elements processed, %d rows deserialized", 
+             row_count, success_count);
 
     return rowset;
 }

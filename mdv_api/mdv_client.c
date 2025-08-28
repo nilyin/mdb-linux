@@ -970,6 +970,13 @@ static void * mdv_rowset_enumerator_impl_current(mdv_enumerator *enumerator)
 }
 
 
+static mdv_objid const * mdv_rowset_enumerator_impl_row_id(mdv_enumerator *enumerator)
+{
+    mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    return impl->fset_enumerator ? mdv_enumerator_row_id(impl->fset_enumerator) : 0;
+}
+
+
 static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset_impl *rowset)
 {
     mdv_rowset_enumerator_impl *enumerator =
@@ -991,7 +998,8 @@ static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset_impl *rowse
         .release = mdv_rowset_enumerator_impl_release,
         .reset   = mdv_rowset_enumerator_impl_reset,
         .next    = mdv_rowset_enumerator_impl_next,
-        .current = mdv_rowset_enumerator_impl_current
+        .current = mdv_rowset_enumerator_impl_current,
+        .row_id  = mdv_rowset_enumerator_impl_row_id
     };
 
     enumerator->base.vptr = &vtbl;

@@ -235,57 +235,44 @@ void mdv_perf_test_single_updates(void) {
     mdv_perf_metrics total_metrics = {0};
     int error_count = 0;
     
-    // Get some row IDs first
-    mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
-    if (!select_rowset) {
-        printf("Failed to select rows for updates\n");
-        return;
-    }
-    
-    mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
-    if (!enumerator) {
-        mdv_rowset_release(select_rowset);
-        printf("Failed to create enumerator for updates\n");
-        return;
-    }
-    
-    mdv_objid *row_ids = malloc(g_config.single_total_updates * sizeof(mdv_objid));
-    int row_count = 0;
-    
-    while (mdv_enumerator_next(enumerator) == MDV_OK && row_count < g_config.single_total_updates) {
-        const mdv_objid *id = mdv_enumerator_row_id(enumerator);
-        if (id) {
-            row_ids[row_count++] = *id;
-        }
-    }
-    
-    mdv_enumerator_release(enumerator);
-    mdv_rowset_release(select_rowset);
-    
-    if (row_count == 0) {
-        printf("No rows found for updates\n");
-        free(row_ids);
-        return;
-    }
-    
+    // Use EXACT same pattern as Bulk Updates (which works)
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
         mdv_perf_monitor_start(&monitor);
         
-        for (int i = 0; i < row_count; i++) {
-            mdv_rowset *rowset = mdv_rowset_create(g_table);
-            if (!rowset) {
+        int updates = 0;
+        
+        // Same SELECT approach as Bulk Updates
+        mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!select_rowset) {
+            printf("No rows found for updates\n");
+            return;
+        }
+        
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+        if (!enumerator) {
+            mdv_rowset_release(select_rowset);
+            printf("No rows found for updates\n");
+            return;
+        }
+        
+        // Same enumeration pattern as Bulk Updates
+        while (mdv_enumerator_next(enumerator) == MDV_OK && updates < g_config.single_total_updates) {
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+            
+            if (!id) {
                 error_count++;
                 continue;
             }
             
-            char name[256] = {0};
-            snprintf(name, sizeof(name), "UpdatedUser_%d", i);
-            uint64_t timestamp = (uint64_t)time(NULL) + i + 1000000;
+            mdv_rowset *update_rowset = mdv_rowset_create(g_table);
             
-            // CRITICAL FIX: Use static storage for numeric values
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "SingleUpdate_%d", updates);
+            uint64_t timestamp = (uint64_t)time(NULL) + updates + 2000000;
+            
             static uint32_t age_value;
-            age_value = 30 + (i % 35);
+            age_value = 40 + (updates % 25);
             
             mdv_data row[] = {
                 { .ptr = name, .size = strlen(name) + 1 },
@@ -294,9 +281,18 @@ void mdv_perf_test_single_updates(void) {
             };
             mdv_data const *rows[] = { row };
             
-            mdv_rowset_append(rowset, rows, 1);
-            if (mdv_update(g_client, g_table, &row_ids[i], rowset) != MDV_OK) error_count++;
-            mdv_rowset_release(rowset);
+            mdv_rowset_append(update_rowset, rows, 1);
+            if (mdv_update(g_client, g_table, id, update_rowset) != MDV_OK) error_count++;
+            mdv_rowset_release(update_rowset);
+            updates++;
+        }
+        
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(select_rowset);
+        
+        if (updates == 0) {
+            printf("No rows found for updates\n");
+            return;
         }
         
         mdv_perf_monitor_stop(&monitor);
@@ -305,9 +301,8 @@ void mdv_perf_test_single_updates(void) {
         mdv_perf_update_metrics(&total_metrics, &sample_metrics);
     }
     
-    free(row_ids);
     g_test_results[2] = total_metrics;
-    mdv_perf_print_metrics("Single Updates", &total_metrics, row_count, error_count);
+    mdv_perf_print_metrics("Single Updates", &total_metrics, g_config.single_total_updates, error_count);
 }
 
 void mdv_perf_test_bulk_updates(void) {

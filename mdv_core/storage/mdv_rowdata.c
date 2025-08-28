@@ -331,6 +331,12 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
             assert(entry->key.size == sizeof(mdv_objid));
 
             *rowid = *(mdv_objid const *)entry->key.ptr;
+            
+            // CRITICAL FIX: Set the row_id in the row entry for UPDATE/DELETE operations
+            row->row_id = *rowid;
+            
+            MDV_LOGI("DEBUG: Setting row_id in entry: node=%u, id=%llu", 
+                     row->row_id.node, row->row_id.id);
 
             int const fst = filter(arg, &row->data);
 

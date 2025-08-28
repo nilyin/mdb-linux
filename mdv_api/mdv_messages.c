@@ -20,6 +20,7 @@ char const * mdv_msg_name(uint32_t id)
         case mdv_message_id(fetch):         return "FETCH";
         case mdv_message_id(rowset):        return "ROWSET";
         case mdv_message_id(delete_from):   return "DELETE FROM";
+        case mdv_message_id(update):        return "UPDATE";
     }
     return "UNKOWN";
 }
