@@ -105,7 +105,10 @@ static int setup_test_environment(void) {
     };
     
     g_client = mdv_client_connect(&config);
-    if (!g_client) return 0;
+    if (!g_client) {
+        MDV_LOGE("Failed to connect client");
+        return 0;
+    }
     
     mdv_field fields[] = {
         { MDV_FLD_TYPE_CHAR, 0, "name" },
@@ -120,7 +123,13 @@ static int setup_test_environment(void) {
     };
     
     g_table = mdv_create_table(g_client, &table_desc);
-    return g_table != NULL;
+    if (!g_table) {
+        MDV_LOGE("Failed to create table");
+        return 0;
+    }
+    
+    MDV_LOGI("Table created successfully");
+    return 1;
 }
 
 static void cleanup_test_environment(void) {
@@ -380,6 +389,7 @@ void mdv_perf_test_bulk_updates(void) {
 void mdv_perf_test_bulk_reads(void) {
     mdv_perf_metrics total_metrics = {0};
     int batches = g_config.bulk_total_reads / g_config.bulk_batch_size;
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -387,6 +397,11 @@ void mdv_perf_test_bulk_reads(void) {
         
         for (int batch = 0; batch < batches; batch++) {
             mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+            if (!rowset) {
+                MDV_LOGE("SELECT failed, skipping batch %d", batch);
+                error_count++;
+                continue;
+            }
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             int count = 0;
@@ -405,11 +420,12 @@ void mdv_perf_test_bulk_reads(void) {
     }
     
     g_test_results[4] = total_metrics;
-    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads, 0);
+    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads, error_count);
 }
 
 void mdv_perf_test_single_reads(void) {
     mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
     
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
@@ -417,6 +433,11 @@ void mdv_perf_test_single_reads(void) {
         
         for (int i = 0; i < g_config.single_total_reads; i++) {
             mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+            if (!rowset) {
+                MDV_LOGE("SELECT failed, skipping read %d", i);
+                error_count++;
+                continue;
+            }
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
@@ -434,7 +455,7 @@ void mdv_perf_test_single_reads(void) {
     }
     
     g_test_results[5] = total_metrics;
-    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads, 0);
+    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads, error_count);
 }
 
 void mdv_perf_test_single_deletes(void) {
@@ -447,6 +468,11 @@ void mdv_perf_test_single_deletes(void) {
         
         for (int i = 0; i < g_config.single_total_deletes; i++) {
             mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+            if (!rowset) {
+                MDV_LOGE("SELECT failed, skipping delete %d", i);
+                error_count++;
+                continue;
+            }
             mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
             
             if (mdv_enumerator_next(enumerator) == MDV_OK) {
@@ -478,16 +504,21 @@ void mdv_perf_test_delete_all(void) {
         mdv_perf_monitor_start(&monitor);
         
         mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
-        mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
-        
-        while (mdv_enumerator_next(enumerator) == MDV_OK) {
-            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
-            if (id && mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
-            else if (!id) error_count++; // Count NULL row_id as error
+        if (!rowset) {
+            MDV_LOGE("SELECT failed for delete all operation");
+            error_count++;
+        } else {
+            mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
+            
+            while (mdv_enumerator_next(enumerator) == MDV_OK) {
+                const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+                if (id && mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
+                else if (!id) error_count++; // Count NULL row_id as error
+            }
+            
+            mdv_enumerator_release(enumerator);
+            mdv_rowset_release(rowset);
         }
-        
-        mdv_enumerator_release(enumerator);
-        mdv_rowset_release(rowset);
         
         mdv_perf_monitor_stop(&monitor);
         mdv_perf_metrics sample_metrics;
@@ -503,6 +534,8 @@ void mdv_perf_test_delete_all(void) {
         while (mdv_enumerator_next(count_enum) == MDV_OK) delete_count++;
         mdv_enumerator_release(count_enum);
         mdv_rowset_release(count_rowset);
+    } else {
+        MDV_LOGE("SELECT failed for counting remaining rows");
     }
     
     g_test_results[7] = total_metrics;

@@ -445,7 +445,7 @@ mdv_errno mdv_2pset_delete(mdv_2pset *objs, mdv_data const *id)
     }
 
     // Remove from objects map
-    if (!mdv_map_del(&objs_map, &transaction, id))
+    if (!mdv_map_del(&objs_map, &transaction, id, &value))
     {
         MDV_LOGE("Failed to delete object from objects map");
         mdv_rollback(rollbacker);
