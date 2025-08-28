@@ -500,11 +500,21 @@ static mdv_errno mdv_user_delete_from_handler(mdv_msg const *msg, void *arg)
 
     if (mdv_msg_delete_from_unbinn(&binn_msg, &delete_from))
     {
-        // TODO: Implement DELETE functionality
         MDV_LOGI("DELETE FROM table=%016llx%016llx, row_id={node=%u, id=%llu}", 
                  delete_from.table.u64[0], delete_from.table.u64[1],
                  delete_from.row_id.node, delete_from.row_id.id);
-        err = MDV_OK; // Temporary success for testing
+        
+        mdv_evt_rowdata_del_req *evt = mdv_evt_rowdata_del_req_create(&delete_from.table, &delete_from.row_id);
+
+        if (evt)
+        {
+            err = mdv_ebus_publish(user->ebus, &evt->base, MDV_EVT_SYNC);
+            mdv_evt_rowdata_del_req_release(evt);
+        }
+        else
+        {
+            err = MDV_NO_MEM;
+        }
     }
     else
         MDV_LOGE("Invalid '%s' message", mdv_msg_name(mdv_msg_delete_from_id));

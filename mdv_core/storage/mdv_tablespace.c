@@ -62,7 +62,8 @@ enum
 {
     MDV_OP_TABLE_CREATE = 0,    ///< Create table
     MDV_OP_TABLE_DROP,          ///< Drop table
-    MDV_OP_ROW_INSERT           ///< Insert data into a table
+    MDV_OP_ROW_INSERT,          ///< Insert data into a table
+    MDV_OP_ROW_DELETE           ///< Delete data from a table
 };
 
 
@@ -83,6 +84,12 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
  * @brief Insert new record into the transaction log for data insertion into the table.
  */
 static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid const *table_id, binn *rows);
+
+
+/**
+ * @brief Insert new record into the transaction log for data deletion from the table.
+ */
+static mdv_errno mdv_tablespace_log_delete(mdv_tablespace *tablespace, mdv_uuid const *table_id, mdv_objid const *row_id);
 
 
 static mdv_hashmap/*<mdv_storage_id>*/ * mdv_tablespace_storage_ids(mdv_topology *topology)
@@ -299,6 +306,14 @@ static mdv_errno mdv_tablespace_evt_rowdata_insert(void *arg, mdv_event *event)
 }
 
 
+static mdv_errno mdv_tablespace_evt_rowdata_delete(void *arg, mdv_event *event)
+{
+    mdv_tablespace          *tablespace  = arg;
+    mdv_evt_rowdata_del_req *rowdata_del = (mdv_evt_rowdata_del_req *)event;
+    return mdv_tablespace_log_delete(tablespace, &rowdata_del->table_id, &rowdata_del->row_id);
+}
+
+
 static mdv_errno mdv_tablespace_evt_rowdata_get(void *arg, mdv_event *event)
 {
     mdv_tablespace  *tablespace = arg;
@@ -356,6 +371,7 @@ static const mdv_event_handler_type mdv_tablespace_handlers[] =
     { MDV_EVT_TABLE_CREATE,   mdv_tablespace_evt_table_create },
     { MDV_EVT_TABLES_GET,     mdv_tablespace_evt_tables_get },
     { MDV_EVT_ROWDATA_INSERT, mdv_tablespace_evt_rowdata_insert },
+    { MDV_EVT_ROWDATA_DELETE, mdv_tablespace_evt_rowdata_delete },
     { MDV_EVT_ROWDATA_GET,    mdv_tablespace_evt_rowdata_get },
     { MDV_EVT_TRLOG_GET,      mdv_tablespace_evt_trlog_get },
     { MDV_EVT_TRLOG_APPLY,    mdv_tablespace_evt_trlog_apply },
@@ -683,6 +699,57 @@ static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid 
 }
 
 
+static mdv_errno mdv_tablespace_log_delete(mdv_tablespace *tablespace, mdv_uuid const *table_id, mdv_objid const *row_id)
+{
+    MDV_LOGI("DEBUG: TABLESPACE - log_delete: table_id=%016llx%016llx, row_id={node=%u, id=%llu}", 
+             table_id->u64[0], table_id->u64[1], row_id->node, row_id->id);
+    
+    mdv_rollbacker *rollbacker = mdv_rollbacker_create(2);
+
+    mdv_trlog *trlog = mdv_tablespace_trlog_create(tablespace, &tablespace->uuid);
+
+    if (!trlog)
+    {
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_trlog_release, trlog);
+
+    size_t const op_size = offsetof(mdv_trlog_op, payload)
+                            + sizeof *table_id
+                            + sizeof *row_id;
+
+    mdv_trlog_op *op = mdv_alloc(op_size);
+
+    if (!op)
+    {
+        mdv_rollback(rollbacker);
+        return MDV_NO_MEM;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_free, op);
+
+    op->size = op_size;
+    op->type = MDV_OP_ROW_DELETE;
+
+    uint8_t *payload = op->payload;
+
+    memcpy(payload, table_id, sizeof *table_id);    payload += sizeof *table_id;
+    memcpy(payload, row_id, sizeof *row_id);        payload += sizeof *row_id;
+
+    if (!mdv_trlog_add_op(trlog, op))
+    {
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollback(rollbacker);
+
+    return MDV_OK;
+}
+
+
 typedef struct
 {
     mdv_tablespace *tablespace;
@@ -783,6 +850,40 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
             // CRITICAL: Only free binn AFTER batch operation completes
             // This ensures all pointers returned by mdv_rowdata_batch_next remain valid
             binn_free(&rowset);
+
+            break;
+        }
+
+        case MDV_OP_ROW_DELETE:
+        {
+            uint8_t *payload = op->payload;
+
+            mdv_uuid table_id;
+            mdv_objid row_id;
+
+            memcpy(&table_id, payload, sizeof table_id);    payload += sizeof table_id;
+            memcpy(&row_id, payload, sizeof row_id);        payload += sizeof row_id;
+
+            MDV_LOGI("DEBUG: TRLOG_APPLY - DELETE: table_id=%016llx%016llx, row_id={node=%u, id=%llu}", 
+                     table_id.u64[0], table_id.u64[1], row_id.node, row_id.id);
+
+            mdv_rowdata *rowdata = mdv_tablespace_rowdata_create(tablespace, &table_id);
+
+            if (rowdata)
+            {
+                ret = mdv_rowdata_delete(rowdata, &row_id) == MDV_OK;
+                
+                if (!ret) {
+                    MDV_LOGE("DEBUG: TRLOG_APPLY - mdv_rowdata_delete FAILED!");
+                }
+
+                mdv_rowdata_release(rowdata);
+            }
+            else
+            {
+                MDV_LOGE("Failed to get rowdata for delete operation");
+                ret = false;
+            }
 
             break;
         }

@@ -384,6 +384,91 @@ mdv_errno mdv_2pset_add_batch(mdv_2pset *objs, void *arg, bool (*next)(void *arg
 }
 
 
+mdv_errno mdv_2pset_delete(mdv_2pset *objs, mdv_data const *id)
+{
+    mdv_rollbacker *rollbacker = mdv_rollbacker_create(3);
+
+    // Start transaction
+    mdv_transaction transaction = mdv_transaction_start(objs->storage);
+
+    if (!mdv_transaction_ok(transaction))
+    {
+        MDV_LOGE("CFstorage transaction not started");
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_transaction_abort, &transaction);
+
+    // Open objects map
+    mdv_map objs_map = mdv_map_open(&transaction,
+                                    MDV_MAP_OBJECTS,
+                                    MDV_MAP_SILENT);
+
+    if (!mdv_map_ok(objs_map))
+    {
+        MDV_LOGE("Table '%s' not opened", MDV_MAP_OBJECTS);
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_map_close, &objs_map);
+
+    // Open removed objects table
+    mdv_map rem_map = mdv_map_open(&transaction, MDV_MAP_REMOVED, MDV_MAP_CREATE);
+
+    if (!mdv_map_ok(rem_map))
+    {
+        MDV_LOGE("Table '%s' not opened", MDV_MAP_REMOVED);
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_map_close, &rem_map);
+
+    // Check if object exists in objects map
+    mdv_data value = {};
+    if (!mdv_map_get(&objs_map, &transaction, id, &value))
+    {
+        MDV_LOGW("Object to delete not found");
+        mdv_rollback(rollbacker);
+        return MDV_NOT_FOUND;
+    }
+
+    // Mark object as deleted by adding to removed objects table
+    mdv_data empty_value = { 0, NULL };
+    if (!mdv_map_put(&rem_map, &transaction, id, &empty_value))
+    {
+        MDV_LOGE("Failed to mark object as deleted");
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    // Remove from objects map
+    if (!mdv_map_del(&objs_map, &transaction, id))
+    {
+        MDV_LOGE("Failed to delete object from objects map");
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    if (!mdv_transaction_commit(&transaction))
+    {
+        MDV_LOGE("Object deletion transaction failed");
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_map_close(&objs_map);
+    mdv_map_close(&rem_map);
+
+    mdv_rollbacker_free(rollbacker);
+
+    MDV_LOGI("DEBUG: 2PSET - Object successfully deleted from LMDB");
+    return MDV_OK;
+}
+
+
 void * mdv_2pset_get(mdv_2pset *objs, mdv_data const *id, void * (*restore)(mdv_data const *))
 {
     mdv_rollbacker *rollbacker = mdv_rollbacker_create(3);

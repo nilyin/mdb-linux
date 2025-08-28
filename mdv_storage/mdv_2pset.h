@@ -89,6 +89,18 @@ mdv_errno mdv_2pset_add_batch(mdv_2pset *objs, void *arg, bool (*next)(void *arg
 
 
 /**
+ * @brief Deletes an object from the storage.
+ *
+ * @param objs [in]     DB objects storage
+ * @param id [in]       Unique object identifier to delete
+ *
+ * @return On success, return MDV_OK.
+ * @return On error, return non zero value
+ */
+mdv_errno mdv_2pset_delete(mdv_2pset *objs, mdv_data const *id);
+
+
+/**
  * @brief Reads and returns the stored object
  *
  * @param objs [in]     DB objects storage

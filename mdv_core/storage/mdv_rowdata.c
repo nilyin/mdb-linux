@@ -232,6 +232,20 @@ mdv_errno mdv_rowdata_add_raw_rowset(mdv_rowdata *rowdata, mdv_objid const *id, 
 }
 
 
+mdv_errno mdv_rowdata_delete(mdv_rowdata *rowdata, mdv_objid const *id)
+{
+    MDV_LOGI("DEBUG: ROWDATA - delete: row_id={node=%u, id=%llu}", id->node, id->id);
+    
+    mdv_data const obj_id =
+    {
+        .size = sizeof *id,
+        .ptr = (void*)id
+    };
+
+    return mdv_2pset_delete(rowdata->objects, &obj_id);
+}
+
+
 static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
                                            mdv_table const      *table,
                                            mdv_bitset const     *fields,

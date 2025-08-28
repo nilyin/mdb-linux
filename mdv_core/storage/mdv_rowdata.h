@@ -93,6 +93,18 @@ mdv_errno mdv_rowdata_add_raw_rowset(mdv_rowdata *rowdata, mdv_objid const *id, 
 
 
 /**
+ * @brief Deletes a row from the storage.
+ *
+ * @param rowdata [in] Rowdata storage
+ * @param id [in]      Row identifier to delete
+ *
+ * @return On success, returns MDV_OK.
+ * @return On error, returns non zero value
+ */
+mdv_errno mdv_rowdata_delete(mdv_rowdata *rowdata, mdv_objid const *id);
+
+
+/**
  * @brief Rows subset reading
  *
  * @param rowdata [in]   Rowdata storage
