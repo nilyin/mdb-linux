@@ -1,6 +1,52 @@
+## Run tests
+
+# 1. terninal 1
+- cleand db with script:
+```
+./clean_db.sh 
+```
+
+- run db server (with gdb if needed):
+```
+gdb --args ./build/mdv_service/medved --cfg=assets/conf/medved.conf
+```
+
+alternative commands:
+```
+cd build && ./mdv_service/medved --cfg=../assets/conf/medved.c nf & sleep 3 ./mdv_tests/mdv_perf 2>&1 | head -50
+
+./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 & SERVER_PID=$!
+kill $SERVER_PID
+
+# Check if empty rows are still being created
+grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" server.log
+
+```
+
+
+# terminal 2
+- rebuilt project with debag info:
+```
+cd build
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+cmake --build .
+```
+
+- run test (with gdb if needed):
+```
+gdb ./mdv_tests/mdv_perf
+
+#or
+./mdv_tests/mdv_tests --gtest_filter="*perf*"
+```
+
+
+
 # add to devcontainer net-tools:
+```
 sudo apt update
 sudo apt install net-tools
+```
 
 # when use:
 netstat -tulpn
@@ -129,4 +175,15 @@ kill $SERVER_PID
 grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" server.log
 
 
+```
+
+
+other usefull commmands:
+
+```
+find . -name "*.c" | xargs grep -l "case.*mdv_msg.*id|switch.*msg.*id|INSERT INTO.*case" | head -3
+./mdv_core/mdv_tracker.c
+
+
+grep -n -A20 -B5 "case.*9|mdv_msg_insert_into_id" /app/mdv_core/mdv_tracker.c
 ```
