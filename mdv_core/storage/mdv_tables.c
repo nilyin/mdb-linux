@@ -147,6 +147,38 @@ mdv_table * mdv_tables_desc(mdv_tables *tables)
     return mdv_table_retain(tables->desc);
 }
 
+/* Diagnostic: log up to max registered table UUIDs from tables storage */
+void mdv_tables_log_sample(mdv_tables *tables, size_t max)
+{
+    if (!tables || max == 0)
+        return;
+
+    mdv_enumerator *it = mdv_2pset_enumerator(tables->objects);
+
+    if (!it)
+    {
+        MDV_LOGI("DEBUG: mdv_tables_log_sample: no enumerator available");
+        return;
+    }
+
+    size_t n = 0;
+
+    while (n < max && mdv_enumerator_next(it) == MDV_OK)
+    {
+        mdv_kvdata const *entry = mdv_enumerator_current(it);
+
+        if (!entry || entry->key.size != sizeof(mdv_uuid))
+            break;
+
+        mdv_uuid const *uuid = (mdv_uuid const *)entry->key.ptr;
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: mdv_tables_log_sample: registered table[%zu] = %s", n, mdv_uuid_to_str(uuid, uuid_str));
+        ++n;
+    }
+
+    mdv_enumerator_release(it);
+}
+
 
 static mdv_rowset * mdv_tables_slice_impl(mdv_tables           *tables,
                                           mdv_enumerator       *enumerator,

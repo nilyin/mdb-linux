@@ -263,6 +263,27 @@ static mdv_errno mdv_tablespace_evt_table_get(void *arg, mdv_event *event)
     else
         get_table->table = mdv_tables_get(tablespace->tables, &get_table->table_id);
 
+    if (!get_table->table)
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: tablespace_evt_table_get: requested table '%s' not found",
+                 mdv_uuid_to_str(&get_table->table_id, uuid_str));
+
+        /* Log TR log state for current tablespace to help diagnose ordering/visibility issues */
+        mdv_trlog *trlog = mdv_tablespace_trlog(tablespace, &tablespace->uuid);
+
+        if (trlog)
+        {
+            uint64_t top = mdv_trlog_top(trlog);
+            uint32_t tid = mdv_trlog_id(trlog);
+            MDV_LOGI("DEBUG: tablespace trlog id=%u top=%llu", tid, top);
+            mdv_trlog_release(trlog);
+        }
+
+        /* Log a small sample of registered table UUIDs for diagnosis */
+        mdv_tables_log_sample(tablespace->tables, 8);
+    }
+
     return get_table->table ? MDV_OK : MDV_FAILED;
 }
 
@@ -582,10 +603,22 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
     op->type = MDV_OP_TABLE_CREATE;
     memcpy(op->payload, binn_ptr(&obj), binn_obj_size);
 
+    /* Diagnostic: log new table creation and UUID */
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: tablespace_log_create_table: creating table '%s'", mdv_uuid_to_str(&uuid, uuid_str));
+    }
+
     if (!mdv_trlog_add_op(trlog, op))
     {
         mdv_rollback(rollbacker);
         return 0;
+    }
+
+    /* Diagnostic: log that create op was appended to TR log */
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: tablespace_log_create_table: TR log append for table '%s' complete", mdv_uuid_to_str(&uuid, uuid_str));
     }
 
     mdv_table_retain(table);
@@ -786,7 +819,21 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                     .ptr = binn_ptr(&obj)
                 };
 
+                /* Diagnostic: log attempt to apply table create from TR log */
+                {
+                    char uuid_str[MDV_UUID_STR_LEN];
+                    MDV_LOGI("DEBUG: trlog_apply: applying table create for '%s'", mdv_uuid_to_str(&uuid, uuid_str));
+                }
+
                 ret = mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK;
+
+                /* Diagnostic: log result of adding table to mdv_tables */
+                {
+                    char uuid_str[MDV_UUID_STR_LEN];
+                    MDV_LOGI("DEBUG: trlog_apply: mdv_tables_add_raw for '%s' result=%s",
+                             mdv_uuid_to_str(&uuid, uuid_str),
+                             ret ? "OK" : "FAILED");
+                }
             }
             else
                 MDV_LOGE("Table creation failed. Invalid TR log operation.");

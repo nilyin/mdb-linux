@@ -656,6 +656,12 @@ static mdv_errno mdv_user_select_handler(mdv_msg const *msg, void *arg)
 
     if (mdv_msg_select_unbinn(&binn_msg, &select))
     {
+        /* Diagnostic log: record table UUID right after deserialization */
+        {
+            char uuid_str[MDV_UUID_STR_LEN];
+            MDV_LOGI("DEBUG: select_handler received table '%s'", mdv_uuid_to_str(&select.table, uuid_str));
+        }
+
         mdv_evt_select * evt = mdv_evt_select_create(&user->session,
                                                      msg->hdr.number,
                                                      &select.table,

@@ -233,6 +233,9 @@ static void mdv_trlog_applied_pos_set(mdv_trlog *trlog, uint64_t applied_pos)
 {
     atomic_store_explicit(&trlog->applied, applied_pos, memory_order_relaxed);
 
+    /* Diagnostic log: record applied position change */
+    MDV_LOGI("DEBUG: trlog_applied_pos_set: applied_pos=%llu", applied_pos);
+
     // Start transaction
     mdv_transaction transaction = mdv_transaction_start(trlog->storage);
 
