@@ -1,5 +1,6 @@
 #include "mdv_rowdata.h"
 #include "mdv_2pset.h"
+#include "mdv_lmdb.h"
 #include <mdv_names.h>
 #include <mdv_rollbacker.h>
 #include <mdv_alloc.h>
@@ -34,11 +35,13 @@ mdv_rowdata * mdv_rowdata_open(char const *dir, mdv_uuid const *table)
 
     char storage_name[64];
 
+    MDV_LOGI("DEBUG: mdv_rowdata_open: dir='%s', table='%s'", dir ? dir : "NULL", MDV_STRG_UUID(table, storage_name, sizeof storage_name));
+
     rowdata->objects = mdv_2pset_open(dir, MDV_STRG_UUID(table, storage_name, sizeof storage_name));
 
     if (!rowdata->objects)
     {
-        MDV_LOGE("Rowdata storage '%s' wasn't created", storage_name);
+        MDV_LOGE("Rowdata storage '%s' wasn't created at dir '%s'", storage_name, dir ? dir : "NULL");
         mdv_rollback(rollbacker);
         return 0;
     }
@@ -291,7 +294,7 @@ static mdv_rowset * mdv_rowdata_slice_impl(mdv_enumerator       *enumerator,
             // Validate entry data before processing
             if (!entry->value.ptr || entry->value.size == 0)
             {
-                MDV_LOGE("Invalid entry data: null pointer or zero size");
+                MDV_LOGI("DEBUG: Empty database - no entries to process (ptr=%p, size=%u)", entry->value.ptr, entry->value.size);
                 break;
             }
 

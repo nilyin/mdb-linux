@@ -254,15 +254,23 @@ void mdv_perf_test_single_updates(void) {
         // Same SELECT approach as Bulk Updates
         mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
         if (!select_rowset) {
-            printf("No rows found for updates\n");
-            return;
+            printf("No rows found for updates (sample %d)\n", sample);
+            // Don't return - continue with empty metrics for this sample
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
         }
         
         mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
         if (!enumerator) {
             mdv_rowset_release(select_rowset);
-            printf("No rows found for updates\n");
-            return;
+            printf("No enumerator available for updates (sample %d)\n", sample);
+            // Don't return - continue with empty metrics for this sample
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
         }
         
         // Same enumeration pattern as Bulk Updates

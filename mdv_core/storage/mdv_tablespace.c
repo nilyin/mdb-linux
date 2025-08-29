@@ -17,6 +17,7 @@
 #include <mdv_mutex.h>
 #include <mdv_safeptr.h>
 #include <mdv_systbls.h>
+#include <stdatomic.h>
 
 
 /// DB tables space
@@ -618,7 +619,44 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
     /* Diagnostic: log that create op was appended to TR log */
     {
         char uuid_str[MDV_UUID_STR_LEN];
-        MDV_LOGI("DEBUG: tablespace_log_create_table: TR log append for table '%s' complete", mdv_uuid_to_str(&uuid, uuid_str));
+        uint64_t trpos = mdv_trlog_top(trlog) - 1;
+        MDV_LOGI("DEBUG: tablespace_log_create_table: appended table='%s' trpos=%llu", mdv_uuid_to_str(&uuid, uuid_str), trpos);
+    }
+
+    /* Directly register the table in mdv_tables to ensure immediate visibility */
+    {
+        mdv_data const data =
+        {
+            .size = binn_size(&obj),
+            .ptr = binn_ptr(&obj)
+        };
+
+        if (mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK)
+        {
+            MDV_LOGI("DEBUG: Table directly registered in mdv_tables: %s", mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+        }
+        else
+        {
+            MDV_LOGE("Failed to register table in mdv_tables");
+        }
+    }
+
+    /* Initialize rowdata storage for the new table to prevent LMDB open failures */
+    {
+        MDV_LOGI("DEBUG: Initializing rowdata storage at path: %s", MDV_CONFIG.storage.rowdata ? MDV_CONFIG.storage.rowdata : "NULL");
+
+        mdv_rowdata *rowdata = mdv_rowdata_open(MDV_CONFIG.storage.rowdata, &uuid);
+        if (rowdata)
+        {
+            MDV_LOGI("DEBUG: Rowdata storage initialized for table: %s", mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+            mdv_rowdata_release(rowdata);
+        }
+        else
+        {
+            MDV_LOGE("Failed to initialize rowdata storage for table: %s at path: %s",
+                     mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}),
+                     MDV_CONFIG.storage.rowdata ? MDV_CONFIG.storage.rowdata : "NULL");
+        }
     }
 
     mdv_table_retain(table);
@@ -822,18 +860,30 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                 /* Diagnostic: log attempt to apply table create from TR log */
                 {
                     char uuid_str[MDV_UUID_STR_LEN];
-                    MDV_LOGI("DEBUG: trlog_apply: applying table create for '%s'", mdv_uuid_to_str(&uuid, uuid_str));
+                    MDV_LOGI("DEBUG: trlog_apply: applying table create uuid=%s", mdv_uuid_to_str(&uuid, uuid_str));
                 }
 
-                ret = mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK;
+                /* Handle case where table already exists in LMDB */
+                mdv_table *existing_table = mdv_tables_get(tablespace->tables, &uuid);
+                if (existing_table) {
+                    /* Table already exists, just update the in-memory reference */
+                    ret = true;
+                    mdv_table_release(existing_table);
+                    MDV_LOGI("DEBUG: trlog_apply: table uuid=%s already exists in mdv_tables, skipping add_raw",
+                             mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+                } else {
+                    ret = mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK;
+                }
 
                 /* Diagnostic: log result of adding table to mdv_tables */
                 {
                     char uuid_str[MDV_UUID_STR_LEN];
-                    MDV_LOGI("DEBUG: trlog_apply: mdv_tables_add_raw for '%s' result=%s",
-                             mdv_uuid_to_str(&uuid, uuid_str),
-                             ret ? "OK" : "FAILED");
+                    MDV_LOGI("DEBUG: trlog_apply: mdv_tables_add_raw uuid=%s add_raw_res=%d",
+                             mdv_uuid_to_str(&uuid, uuid_str), ret);
                 }
+
+                /* Log sample of registered tables after apply attempt */
+                mdv_tables_log_sample(tablespace->tables, 8);
             }
             else
                 MDV_LOGE("Table creation failed. Invalid TR log operation.");

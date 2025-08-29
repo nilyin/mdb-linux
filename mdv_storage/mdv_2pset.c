@@ -403,7 +403,7 @@ mdv_errno mdv_2pset_delete(mdv_2pset *objs, mdv_data const *id)
     // Open objects map
     mdv_map objs_map = mdv_map_open(&transaction,
                                     MDV_MAP_OBJECTS,
-                                    MDV_MAP_SILENT);
+                                    MDV_MAP_CREATE | MDV_MAP_SILENT);
 
     if (!mdv_map_ok(objs_map))
     {
@@ -488,7 +488,7 @@ void * mdv_2pset_get(mdv_2pset *objs, mdv_data const *id, void * (*restore)(mdv_
     // Open objects map
     mdv_map objs_map = mdv_map_open(&transaction,
                                     MDV_MAP_OBJECTS,
-                                    MDV_MAP_SILENT);
+                                    MDV_MAP_CREATE | MDV_MAP_SILENT);
 
     if (!mdv_map_ok(objs_map))
     {
@@ -659,13 +659,19 @@ static mdv_enumerator * mdv_objects_enumerator_impl_create(mdv_2pset *objs, mdv_
     mdv_rollbacker_push(rollbacker, mdv_transaction_abort, &enumerator->transaction);
 
     // Open objects map
-    enumerator->map = mdv_map_open(&enumerator->transaction, MDV_MAP_OBJECTS, 0);
+    enumerator->map = mdv_map_open(&enumerator->transaction, MDV_MAP_OBJECTS, MDV_MAP_CREATE);
 
     if (!mdv_map_ok(enumerator->map))
     {
-        MDV_LOGE("Table '%s' not opened", MDV_MAP_OBJECTS);
-        mdv_rollback(rollbacker);
-        return 0;
+        MDV_LOGE("Table '%s' not opened, trying with SILENT flag", MDV_MAP_OBJECTS);
+        enumerator->map = mdv_map_open(&enumerator->transaction, MDV_MAP_OBJECTS, MDV_MAP_CREATE | MDV_MAP_SILENT);
+
+        if (!mdv_map_ok(enumerator->map))
+        {
+            MDV_LOGE("Table '%s' still not opened even with SILENT flag", MDV_MAP_OBJECTS);
+            mdv_rollback(rollbacker);
+            return 0;
+        }
     }
 
     mdv_rollbacker_push(rollbacker, mdv_map_close, &enumerator->map);
@@ -680,9 +686,38 @@ static mdv_enumerator * mdv_objects_enumerator_impl_create(mdv_2pset *objs, mdv_
 
     if (!mdv_cursor_ok(enumerator->cursor))
     {
-        MDV_LOGE("Table '%s' cursor not opened", MDV_MAP_OBJECTS);
-        mdv_rollback(rollbacker);
-        return 0;
+        MDV_LOGE("Table '%s' cursor not opened (op=%d), attempting recovery", MDV_MAP_OBJECTS, op);
+
+        // Try to recreate the map with explicit CREATE flag
+        mdv_map_close(&enumerator->map);
+        enumerator->map = mdv_map_open(&enumerator->transaction, MDV_MAP_OBJECTS, MDV_MAP_CREATE);
+
+        if (mdv_map_ok(enumerator->map))
+        {
+            enumerator->cursor = mdv_cursor_open_explicit(
+                                    &enumerator->map,
+                                    &enumerator->transaction,
+                                    &enumerator->current.key,
+                                    &enumerator->current.value,
+                                    op);
+
+            if (mdv_cursor_ok(enumerator->cursor))
+            {
+                MDV_LOGI("DEBUG: Cursor recovery successful");
+            }
+            else
+            {
+                MDV_LOGE("Table '%s' cursor recovery failed", MDV_MAP_OBJECTS);
+                mdv_rollback(rollbacker);
+                return 0;
+            }
+        }
+        else
+        {
+            MDV_LOGE("Table '%s' map recreation failed", MDV_MAP_OBJECTS);
+            mdv_rollback(rollbacker);
+            return 0;
+        }
     }
 
     enumerator->objects = mdv_2pset_retain(objs);
