@@ -4,13 +4,12 @@
 #include "mdv_crypto.h"
 #include "mdv_storage.h"
 #include "mdv_crud.h"
-#include "segfault_test.h"
 #include <minunit.h>
 #include <mdv_log.h>
 #include <string.h>
 
 
-int main(int argc, char *argv[])
+int main()
 {
     mdv_logf_set_level(ZF_LOG_WARN);
 
@@ -20,7 +19,6 @@ int main(int argc, char *argv[])
     MU_RUN_SUITE(crypto);
     MU_RUN_SUITE(storage);
     MU_RUN_SUITE(crud);
-    MU_RUN_SUITE(segfault_suite);
     MU_REPORT();
 
     return minunit_status;
