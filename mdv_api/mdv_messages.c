@@ -229,7 +229,7 @@ bool mdv_msg_insert_into_unbinn(binn const * obj, mdv_msg_insert_into *msg)
         return false;
     }
     
-    MDV_LOGI("DEBUG: unbinn_insert_into success, table=%016llx%016llx, rows=%p", 
+    MDV_LOGI("DEBUG: unbinn_insert_into success, table_uuid=%016llx%016llx, rows=%p",
              msg->table.u64[0], msg->table.u64[1], msg->rows);
 
     return true;

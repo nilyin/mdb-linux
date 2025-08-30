@@ -307,15 +307,14 @@ void mdv_perf_test_single_updates(void) {
         mdv_enumerator_release(enumerator);
         mdv_rowset_release(select_rowset);
         
-        if (updates == 0) {
-            printf("No rows found for updates\n");
-            return;
-        }
-        
         mdv_perf_monitor_stop(&monitor);
         mdv_perf_metrics sample_metrics;
         mdv_perf_calculate_metrics(&monitor, &sample_metrics);
         mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (updates == 0) {
+            printf("No rows found for updates (sample %d)\n", sample);
+        }
     }
     
     g_test_results[2] = total_metrics;
@@ -469,36 +468,106 @@ void mdv_perf_test_single_reads(void) {
 void mdv_perf_test_single_deletes(void) {
     mdv_perf_metrics total_metrics = {0};
     int error_count = 0;
-    
+
     for (int sample = 0; sample < g_config.measurement_samples; sample++) {
         mdv_perf_monitor monitor;
         mdv_perf_monitor_start(&monitor);
-        
+
+        // Insert fresh data for this sample
         for (int i = 0; i < g_config.single_total_deletes; i++) {
-            mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
-            if (!rowset) {
-                MDV_LOGE("SELECT failed, skipping delete %d", i);
+            mdv_rowset *insert_rowset = mdv_rowset_create(g_table);
+
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "DeleteTest_%d_%d", sample, i);
+
+            static uint32_t age_value;
+            static uint64_t timestamp_value;
+
+            age_value = 30 + (i % 20);
+            timestamp_value = (uint64_t)time(NULL) + sample * 1000 + i;
+
+            mdv_data row[] = {
+                { .ptr = name, .size = strlen(name) + 1 },
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp_value, .size = 8 }
+            };
+            mdv_data const *rows[] = { row };
+
+            mdv_rowset_append(insert_rowset, rows, 1);
+            if (mdv_insert(g_client, insert_rowset) != MDV_OK) {
+                MDV_LOGE("Failed to insert test data for sample %d, row %d", sample, i);
+            }
+            mdv_rowset_release(insert_rowset);
+        }
+
+        int deletes_performed = 0;
+
+        // Select only the rows we just inserted for this sample
+        char filter[256];
+        snprintf(filter, sizeof(filter), "name LIKE 'DeleteTest_%d_%%'", sample);
+
+        mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, filter);
+        if (!rowset) {
+            MDV_LOGE("SELECT failed for single deletes sample %d", sample);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
+        if (!enumerator) {
+            MDV_LOGE("Failed to create enumerator for single deletes sample %d", sample);
+            mdv_rowset_release(rowset);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        // Delete only the rows we inserted for this sample
+        int enumerator_calls = 0;
+        while (mdv_enumerator_next(enumerator) == MDV_OK && deletes_performed < g_config.single_total_deletes) {
+            enumerator_calls++;
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+
+            if (!id) {
+                printf("DEBUG: Single Deletes - NULL row_id encountered at call %d, skipping\n", enumerator_calls);
                 error_count++;
                 continue;
             }
-            mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
-            
-            if (mdv_enumerator_next(enumerator) == MDV_OK) {
-                const mdv_objid *id = mdv_enumerator_row_id(enumerator);
-                if (id && mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
-                else if (!id) error_count++; // Count NULL row_id as error
+
+            printf("DEBUG: Single Deletes - Sample %d, Call %d, deleting row %d: node=%u, id=%lu\n",
+                   sample, enumerator_calls, deletes_performed, id->node, (unsigned long)id->id);
+
+            if (mdv_delete(g_client, g_table, id) != MDV_OK) {
+                printf("DEBUG: Single Deletes - Delete failed for row %d (call %d)\n", deletes_performed, enumerator_calls);
+                error_count++;
+            } else {
+                printf("DEBUG: Single Deletes - Successfully deleted row %d (call %d)\n", deletes_performed, enumerator_calls);
+                deletes_performed++;
             }
-            
-            mdv_enumerator_release(enumerator);
-            mdv_rowset_release(rowset);
         }
-        
+
+        printf("DEBUG: Single Deletes - Sample %d: Enumerator called %d times, deleted %d rows\n", sample, enumerator_calls, deletes_performed);
+
+        printf("DEBUG: Single Deletes - Completed sample %d, deleted %d rows\n", sample, deletes_performed);
+
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(rowset);
+
         mdv_perf_monitor_stop(&monitor);
         mdv_perf_metrics sample_metrics;
         mdv_perf_calculate_metrics(&monitor, &sample_metrics);
         mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (deletes_performed == 0) {
+            printf("No rows found for deletes (sample %d)\n", sample);
+        }
     }
-    
+
     g_test_results[6] = total_metrics;
     mdv_perf_print_metrics("Single Deletes", &total_metrics, g_config.single_total_deletes, error_count);
 }

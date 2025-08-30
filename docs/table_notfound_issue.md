@@ -1,8 +1,8 @@
 # This file describes the working context and plan for fixing "Table not found" bug found during performance tests implemented in file 'mdv_tests/mdv_perf.c'
 
 ### Problem Description
-A critical issue was observed where the server reports "Table not found" errors despite the client sending valid SELECT requests with correct table IDs. 
-! IMPORTANT observation: the problem appears only when executing multiple test file runs one after another without underlaying server database storage engine (LMDB) cleaning. Simple medved DB server restart doesn't help and error is seen at the first test run. Each test run the different table ID is shown in DB server error message: "Selection reqiest failed for table '2EC892C960484DAF952C77C719EFF984' with error 'Table not found'"
+A critical issue was observed where the server reports "Table not found" errors despite the client sending valid SELECT requests with correct table IDs.
+! IMPORTANT observation: the problem appears only when executing multiple test file runs one after another without underlying server database storage engine (LMDB) cleaning. Simple MedvedDB server restart doesn't help and error is seen at the first test run. Each test run shows different table IDs in the server error message: "Selection request failed for table '2EC892C960484DAF952C77C719EFF984' with error 'Table not found'"
 
 ### Symptoms
 1. **Client-Server ID Mismatch**: Client sends SELECT requests with table ID `2a4b14b66ce97758edc0dae76f7cfcb8` (as shown in server logs: "unbinn_select success, table=2a4b14b66ce97758edc0dae76f7cfcb8")
@@ -453,6 +453,53 @@ The following diagnostic logs were added to help identify and debug similar issu
 - Diagnostics added: Comprehensive logging for future debugging
 
 The "Table not found" bug in MedvedDB's performance tests has been completely resolved. The fix ensures that table creation operations are immediately visible to subsequent SELECT operations, eliminating the timing-related visibility issue that occurred on subsequent test runs.
+
+## Additional Issues Discovered and Fixed
+
+### DELETE Operation Idempotency Issue
+**Problem:** Server was attempting to delete the same row_id repeatedly, causing "Object to delete not found" errors
+**Root Cause:** DELETE operations were not idempotent - attempting to delete a non-existent row was treated as an error rather than success
+**Fix Applied:**
+```c
+// Before: DELETE failure = TR log apply failure
+mdv_errno delete_result = mdv_rowdata_delete(rowdata, &row_id);
+if (delete_result == MDV_OK) {
+    ret = true;  // Row deleted successfully
+} else if (delete_result == MDV_NOT_FOUND) {
+    ret = true;  // Idempotent - row already doesn't exist
+    MDV_LOGI("DEBUG: TRLOG_APPLY - DELETE: row not found (idempotent success)");
+} else {
+    ret = false; // Unexpected error
+    MDV_LOGE("DEBUG: TRLOG_APPLY - DELETE: unexpected error %d", delete_result);
+}
+```
+
+**Impact:** DELETE operations now complete successfully even when attempting to delete non-existent rows, preventing TR log operation failures.
+
+### Performance Test Single Deletes Bug
+**Problem:** Test was sending multiple DELETE requests for the same row_id instead of different rows
+**Root Cause:** Test logic flaw - SELECTing all rows once but then repeatedly deleting the first row found
+**Fix Applied:** Modified test to properly iterate through all rows and delete each one once
+**Impact:** Performance tests now correctly measure different row deletions instead of duplicate operations
+
+### Log Naming Consistency Issues
+**Problem:** Inconsistent attribute naming in log messages (table_id vs table_uuid, table vs table_file)
+**Fix Applied:** Standardized all log messages to use consistent, descriptive naming conventions
+**Impact:** Improved debugging experience with clear, consistent log attribute names
+
+## Final Status: All Issues Resolved ✅
+
+**Issue Status:** ✅ **COMPLETED**
+
+**All identified issues have been resolved:**
+- ✅ Table creation visibility timing issue
+- ✅ DELETE operation idempotency
+- ✅ Performance test logic bugs
+- ✅ Log naming consistency
+- ✅ Empty database cursor handling
+- ✅ LMDB map creation robustness
+
+The MedvedDB system now handles all database operations correctly across multiple test runs without requiring database cleaning.
 
 New diagnostics added (where)
 - Handler: [`mdv_core/mdv_user.c:657`](mdv_core/mdv_user.c:657)

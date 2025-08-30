@@ -716,6 +716,10 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
 
 mdv_errno mdv_delete(mdv_client *client, mdv_table *table, mdv_objid const *row_id)
 {
+    // Debug: Log the row_id being sent in DELETE request
+    MDV_LOGI("DEBUG: DELETE - Sending request for row_id={node=%u, id=%lu}",
+             row_id->node, (unsigned long)row_id->id);
+
     mdv_msg_delete_from delete_from =
     {
         .table = *mdv_table_uuid(table),

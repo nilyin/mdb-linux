@@ -35,7 +35,7 @@ mdv_rowdata * mdv_rowdata_open(char const *dir, mdv_uuid const *table)
 
     char storage_name[64];
 
-    MDV_LOGI("DEBUG: mdv_rowdata_open: dir='%s', table='%s'", dir ? dir : "NULL", MDV_STRG_UUID(table, storage_name, sizeof storage_name));
+    MDV_LOGI("DEBUG: mdv_rowdata_open: dir='%s', table_file='%s'", dir ? dir : "NULL", MDV_STRG_UUID(table, storage_name, sizeof storage_name));
 
     rowdata->objects = mdv_2pset_open(dir, MDV_STRG_UUID(table, storage_name, sizeof storage_name));
 
