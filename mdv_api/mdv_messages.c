@@ -1,6 +1,7 @@
 #include "mdv_messages.h"
 #include <mdv_log.h>
 #include <mdv_serialization.h>
+#include <string.h>
 
 
 char const * mdv_msg_name(uint32_t id)
@@ -440,14 +441,25 @@ bool mdv_msg_delete_from_binn(mdv_msg_delete_from const *msg, binn *obj)
 
 bool mdv_msg_delete_from_unbinn(binn const * obj, mdv_msg_delete_from *msg)
 {
+    void *row_blob = NULL;
+    int   blob_size = 0;
+
     if (0
         || !binn_object_get_uint64((void*)obj, "T0", (uint64 *)(msg->table.u64 + 0))
         || !binn_object_get_uint64((void*)obj, "T1", (uint64 *)(msg->table.u64 + 1))
-        || !binn_object_get_blob((void*)obj, "R", &msg->row_id, 0))
+        || !binn_object_get_blob((void*)obj, "R", &row_blob, &blob_size))
     {
         MDV_LOGE("unbinn_delete_from failed");
         return false;
     }
+
+    if ((size_t)blob_size != sizeof(msg->row_id))
+    {
+        MDV_LOGE("unbinn_delete_from: wrong row_id blob size %d (expected %zu)", blob_size, sizeof(msg->row_id));
+        return false;
+    }
+
+    memcpy(&msg->row_id, row_blob, sizeof(msg->row_id));
 
     return true;
 }
@@ -488,16 +500,26 @@ bool mdv_msg_update_binn(mdv_msg_update const *msg, binn *obj)
 bool mdv_msg_update_unbinn(binn const * obj, mdv_msg_update *msg)
 {
     binn const *rows = 0;
+    void *row_blob = NULL;
+    int   blob_size = 0;
 
     if (0
         || !binn_object_get_uint64((void*)obj, "T0", (uint64 *)(msg->table.u64 + 0))
         || !binn_object_get_uint64((void*)obj, "T1", (uint64 *)(msg->table.u64 + 1))
-        || !binn_object_get_blob((void*)obj, "R", &msg->row_id, 0)
+        || !binn_object_get_blob((void*)obj, "R", &row_blob, &blob_size)
         || !binn_object_get_list(obj, "D", (void**)&rows))
     {
         MDV_LOGE("unbinn_update failed");
         return false;
     }
+
+    if ((size_t)blob_size != sizeof(msg->row_id))
+    {
+        MDV_LOGE("unbinn_update: wrong row_id blob size %d (expected %zu)", blob_size, sizeof(msg->row_id));
+        return false;
+    }
+
+    memcpy(&msg->row_id, row_blob, sizeof(msg->row_id));
 
     // TODO: implement rows unbinn
     // msg->rows = mdv_unbinn_rowset(rows, 0);

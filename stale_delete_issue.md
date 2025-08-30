@@ -492,3 +492,89 @@ The DELETE looping issue was primarily caused by **client-side test logic flaws*
 - `mdv_core/storage/mdv_tablespace.c`: Enhanced DELETE idempotency handling
 
 The underlying architecture with LMDB as the storage backend and TR log for durability provides a solid foundation for reliable database operations. The fixes ensure robust handling of edge cases and proper test execution patterns.
+
+## Additional Findings: Topology, Fix Summary, and DELETE Performance
+
+### Topology & Node ID lifecycle (what I learned)
+- Row identifiers (mdv_objid) are defined as a packed structure with a node and id field; see [`mdv_types/mdv_objid.h`](mdv_types/mdv_objid.h:8).
+- Numeric node ids are derived from the cluster topology and assigned to TR log storages at open time:
+  - The tablespace builds a topology → storage-id map when initialized (see [`mdv_core/storage/mdv_tablespace.c`](mdv_core/storage/mdv_tablespace.c:96)).
+  - TR log storages are opened with a numeric id and that id is used later to tag inserted rows; the trlog open call receives the id (see [`mdv_core/storage/mdv_trlog.c`](mdv_core/storage/mdv_trlog.c:109)).
+  - When applying TR log INSERT operations, the code sets the inserted row's node to the trlog id (see [`mdv_core/storage/mdv_tablespace.c`](mdv_core/storage/mdv_tablespace.c:926) where rowid.node = context->node_id).
+- Practical consequence: deleting LMDB files alone does not automatically change the topology-driven numeric node id unless the topology (node UUIDs / mapping) also changes. To preserve the same numeric node id across a storage wipe, persist or preserve the topology mapping used to generate the numeric id.
+
+### Summary of the bug fix (what I changed)
+- Root cause: unsafe deserialization of mdv_objid from the network binn object — the code passed &msg->row_id directly into the binn blob API which allowed aliasing/partial-overwrite and produced corrupt node values.
+- Fix implemented in message deserialization:
+  - Read the row_id blob into a temporary pointer + size, validate blob size equals sizeof(mdv_objid), then memcpy into the mdv_objid struct (see code in [`mdv_api/mdv_messages.c`](mdv_api/mdv_messages.c:441) and [`mdv_api/mdv_messages.c`](mdv_api/mdv_messages.c:488)).
+  - This ensures the node and id fields exactly match the client-sent bytes.
+- Evidence: client logs show deletes with node=0 and server TR log apply shows node=0 (previous bad node numbers such as 4026536863 are no longer present).
+
+### Why DELETE is so much slower than reads/updates (analysis)
+Observed client summary (excerpt you provided):
+- Single Deletes: Avg ~1889 ms/op
+- Single Updates: Avg ~1001 ms/op
+- Single Reads: Avg ~187.9 ms/op
+- Bulk operations (bulk inserts/reads) are much faster per-op.
+
+Root reasons and code-level causes:
+1. Write-path vs read-path differences
+   - Reads are read-only and do not require LMDB write transactions; they use read cursors which are cheap (no serialization of writers).
+   - Deletes are write operations that must be durably logged and applied; they hit the TR log and LMDB write code paths which are orders of magnitude more expensive per-op.
+
+2. TR log append cost
+   - Each client DELETE causes the server to create a TR log operation and call `mdv_trlog_add_op()` which performs an LMDB write transaction and `mdb_txn_commit()` (see [`mdv_core/storage/mdv_trlog.c`](mdv_core/storage/mdv_trlog.c:345)). Disk commit/transaction overhead dominates latency.
+   - Per-op commits are expensive; bulk operations amortize the commit overhead across many rows, hence lower per-op time.
+
+3. LMDB single writer limitation and write serialization
+   - LMDB allows only a single active write transaction at a time. When many single-delete requests are processed, they serialize on acquiring the write txn, increasing latency compared to concurrent reads.
+   - The delete path opens/commits small transactions repeatedly; this contention shows up as high per-op latency.
+
+4. Extra work on TR log apply (synchronous or near-synchronous)
+   - The server appends to TR log and then background trlog apply may open write txn(s) to apply deletes into rowdata. Depending on timing the background applier or commit path can incur additional overhead and temporary blocking.
+   - The code also reserves/allocates structures and opens rowdata storage in the apply path (`mdv_tablespace_rowdata_create`) which adds overhead.
+
+5. Updates in this codebase may be artificially cheap in the test
+   - Note: The server update handler currently contains a `// TODO` and returns success early without performing actual update work (see [`mdv_core/mdv_user.c`](mdv_core/mdv_user.c:573)). This means measured "Single Updates" may not perform the full write-path the way deletes do — making updates appear faster than they would if fully implemented.
+
+6. Cursor and delete overhead inside rowdata
+   - Deleting a row involves locating it with a cursor (mdv_cursor_get with MDB_SET / MDB_GET_CURRENT) and then deleting with mdv_map_del or mdb_cursor_del — these are write operations that may reorganize B-tree pages and cause disk I/O.
+
+Conclusions: deletes are dominated by write durability, commit frequency, and LMDB write serialization. Updates may appear faster due to stubbed implementation in the server and bulk operations are faster per-op because they amortize the commit cost.
+
+### Recommendations to speed up DELETE
+Short-term / test-only:
+- Batch deletes on the client (send multiple deletes in one TR log op) to amortize transaction commits. Use `mdv_trlog_add` / batch APIs instead of one-op-per-delete.
+- Run tests with relaxed durability flags (only for benchmarking): enable LMDB flags that avoid fsync (MDV_STRG_NOSYNC / MDV_STRG_NOMETASYNC) — careful, this risks data loss.
+
+Medium-term / code changes:
+- Use grouped TR log writes: modify the client test to send batched rowsets for deletes (similar to bulk insert) so server can append a single op and commit once.
+- Implement a write-batching layer on the server: gather many delete ops into a batch before committing TR log / applying rowdata.
+- Apply deletes in fewer LMDB transactions: allow background applier to take a batch of deletes and perform them in a single write transaction.
+- Rework update path to perform the same durable process as deletes if updates should be real writes — or ensure both write and delete paths use the same batching/durability strategies for fair benchmarking.
+
+Instrumentation to pinpoint hotspots (practical steps)
+- Time and log durations for:
+  - mdv_trlog_add_op (wrap timing around TR log append and mdb_txn_commit).
+  - mdv_rowdata_delete / mdv_map_del / mdb_cursor_del (wrap timing inside `mdv_rowdata_delete` implementation).
+  - mdv_trlog_apply processing per-op (time spent applying a single TR entry).
+- Search and add diagnostic logs at:
+  - [`mdv_core/storage/mdv_trlog.c`](mdv_core/storage/mdv_trlog.c:345) around `mdv_map_put_unique` and `mdb_txn_commit`.
+  - [`mdv_core/storage/mdv_tablespace.c`](mdv_core/storage/mdv_tablespace.c:773) where log_delete constructs TR op.
+  - [`mdv_storage/mdv_lmdb.c`](mdv_storage/mdv_lmdb.c:158) around `mdv_transaction_commit()` and cursor delete paths (`mdv_map_del`, `mdv_cursor_get`, `mdv_cursor_del`) to measure commit latencies.
+
+### Suggested immediate change for this codebase (low-risk)
+- Implement small batching for single-delete ops in the performance test: accumulate N deletes and send them as a single rowset TR log op. This will dramatically reduce per-op latency in tests without touching storage code.
+
+### TODO (I can do these for you)
+- [ ] Update `stale_delete_issue.md` to include the topology & fix summary (done in this edit).
+- [ ] Add instrumentation (timers/logging) around `mdv_trlog_add_op` and `mdv_rowdata_delete` to show exact per-stage latencies (I can add and run a focused benchmark).
+- [ ] Implement/benchmark a small batching change in `mdv_tests/mdv_perf.c` to measure improvements.
+
+Which next step do you want me to perform now?
+- Add instrumentation and run a short focused test (I will keep logs small).
+- Implement client-side delete batching in the perf test and re-run to show improvement.
+- Nothing: just keep this documentation update and recommendations.
+
+Pick one and I will proceed with the appropriate changes and targeted runs.
+</attempt_completion>
