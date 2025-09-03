@@ -47,12 +47,12 @@ typedef struct {} mdv_client;
         return mdv_dbclient_select($self, table, fields, filter);
     }
 
-    bool delete(mdv_table *table, mdv_objid const *row_id)
+    bool delete(mdv_table *table, mdv_objid *row_id)
     {
         return mdv_delete($self, table, row_id) == MDV_OK;
     }
 
-    bool update(mdv_table *table, mdv_objid const *row_id, mdv_rowset *rowset)
+    bool update(mdv_table *table, mdv_objid *row_id, mdv_rowset *rowset)
     {
         return mdv_update($self, table, row_id, rowset) == MDV_OK;
     }

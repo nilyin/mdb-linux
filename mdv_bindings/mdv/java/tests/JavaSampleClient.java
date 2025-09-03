@@ -134,50 +134,24 @@ class JavaSampleClient {
         {
             Row row = it.current();
 
-            // Get row ID from the enumerator - per SWIG analysis, RowSetEnumerator has row_id() method
+            // Get row ID from the enumerator - direct method call
+            ObjectId objId = it.row_id();
             String rowId = "";
             String idOnly = "";
-            try {
-                // Call row_id() method on the enumerator (RowSetEnumerator) - returns ObjectId
-                java.lang.reflect.Method rowIdMethod = it.getClass().getMethod("row_id");
-                Object objId = rowIdMethod.invoke(it);
-                if (objId != null) {
-                    // Full ObjectId string representation
-                    rowId = objId.toString();
+            
+            if (objId != null) {
+                // Full ObjectId string representation
+                rowId = objId.toString();
 
-                    // Extract just the ID part (last 16 hex characters = 8 bytes)
-                    if (rowId.length() >= 16) {
-                        idOnly = rowId.substring(rowId.length() - 16);
-                    } else {
-                        idOnly = rowId;
-                    }
+                // Extract just the ID part (last 16 hex characters = 8 bytes)
+                if (rowId.length() >= 16) {
+                    idOnly = rowId.substring(rowId.length() - 16);
                 } else {
-                    rowId = "null-objid";
-                    idOnly = "null";
-                }
-            } catch (Exception e) {
-                // Fallback methods if row_id() fails
-                String[] fallbackMethods = {"getId", "getRowId", "getUUID", "getObjectId"};
-                boolean found = false;
-                for (String methodName : fallbackMethods) {
-                    try {
-                        java.lang.reflect.Method method = it.getClass().getMethod(methodName);
-                        Object id = method.invoke(it);
-                        if (id != null) {
-                            rowId = id.toString();
-                            idOnly = rowId.length() >= 16 ? rowId.substring(rowId.length() - 16) : rowId;
-                            found = true;
-                            break;
-                        }
-                    } catch (Exception e2) {
-                        continue;
-                    }
-                }
-                if (!found) {
-                    // Final fallback to hash
-                    rowId = "hash:" + Integer.toHexString(row.hashCode());
                     idOnly = rowId;
                 }
+            } else {
+                rowId = "null-objid";
+                idOnly = "null";
             }
 
             long f0size = row.fieldSize(0);                             // Get items count in 0's field
@@ -221,6 +195,9 @@ class JavaSampleClient {
             }
 
             row.delete();
+            if (objId != null) {
+                objId.delete();
+            }
             rowIndex++;
         }
 
@@ -265,15 +242,14 @@ class JavaSampleClient {
                     if (it.next()) {
                         Row row = it.current();
 
-                        // Try to get ObjectId from enumerator
-                        java.lang.reflect.Method rowIdMethod = it.getClass().getMethod("row_id");
-                        Object objId = rowIdMethod.invoke(it);
+                        // Get ObjectId from enumerator
+                        ObjectId objId = it.row_id();
 
                         if (objId != null) {
                             System.out.println("Attempting to delete row with ObjectId: " + objId.toString());
 
                             // Test delete operation
-                            boolean deleteResult = client.delete(table, (mdv.ObjectId)objId);
+                            boolean deleteResult = client.delete(table, objId);
                             System.out.println("Delete operation result: " + deleteResult);
 
                             if (deleteResult) {
@@ -286,6 +262,9 @@ class JavaSampleClient {
                         }
 
                         row.delete();
+                        if (objId != null) {
+                            objId.delete();
+                        }
                     }
 
                     it.delete();
@@ -321,9 +300,8 @@ class JavaSampleClient {
                     if (it.next()) {
                         Row row = it.current();
 
-                        // Try to get ObjectId from enumerator
-                        java.lang.reflect.Method rowIdMethod = it.getClass().getMethod("row_id");
-                        Object objId = rowIdMethod.invoke(it);
+                        // Get ObjectId from enumerator
+                        ObjectId objId = it.row_id();
 
                         if (objId != null) {
                             System.out.println("Attempting to update row with ObjectId: " + objId.toString());
@@ -345,7 +323,7 @@ class JavaSampleClient {
                             updateRow.delete();
 
                             // Test update operation
-                            boolean updateResult = client.update(table, (mdv.ObjectId)objId, updateRowset);
+                            boolean updateResult = client.update(table, objId, updateRowset);
                             System.out.println("Update operation result: " + updateResult);
 
                             if (updateResult) {
@@ -361,6 +339,9 @@ class JavaSampleClient {
                         }
 
                         row.delete();
+                        if (objId != null) {
+                            objId.delete();
+                        }
                     }
 
                     it.delete();

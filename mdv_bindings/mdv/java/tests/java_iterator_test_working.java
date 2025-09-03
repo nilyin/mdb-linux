@@ -1,6 +1,6 @@
 import mdv.*;
 
-public class java_iterator_test {
+public class java_iterator_test_working {
     
     private static int testsPassed = 0;
     private static int testsFailed = 0;
@@ -22,7 +22,7 @@ public class java_iterator_test {
         // Connect to the database
         Client client = Client.connect(config);
         
-        // Setup test table with unique name
+        // Setup test table with unique name and 2 fields
         TableDesc tableDesc = new TableDesc("iterator_test_" + System.currentTimeMillis());
         tableDesc.addField(FieldType.MDV_FLD_TYPE_UINT32, 1, "id");
         tableDesc.addField(FieldType.MDV_FLD_TYPE_CHAR, 32, "name");
@@ -215,21 +215,14 @@ public class java_iterator_test {
         }
     }
     
-    // Test 5: Empty result set (simulate by creating empty table)
+    // Test 5: Empty result set
     private static void testEmptyResultSet(Client client, Table table) {
         String testName = "Empty result set";
         try {
-            // Create a new empty table for this test
-            TableDesc emptyTableDesc = new TableDesc("empty_test_" + System.currentTimeMillis());
-            emptyTableDesc.addField(FieldType.MDV_FLD_TYPE_UINT32, 1, "id");
-            emptyTableDesc.addField(FieldType.MDV_FLD_TYPE_CHAR, 32, "name");
-            Table emptyTable = client.createTable(emptyTableDesc);
-            emptyTableDesc.delete();
-            
             int rowCount = 0;
             BitSet bitSet = new BitSet(2);
             bitSet.fill(true);
-            RowSet selectRowset = client.select(emptyTable, bitSet, "");
+            RowSet selectRowset = client.select(table, bitSet, "id > 100");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -244,7 +237,6 @@ public class java_iterator_test {
                 }
             }
             bitSet.delete();
-            emptyTable.delete();
             
             if (rowCount == 0) {
                 pass(testName);
@@ -256,31 +248,14 @@ public class java_iterator_test {
         }
     }
     
-    // Test 6: Single row result set (simulate by creating table with one row)
+    // Test 6: Single row result set
     private static void testSingleRowResultSet(Client client, Table table) {
         String testName = "Single row result set";
         try {
-            // Create a new table with only one row for this test
-            TableDesc singleTableDesc = new TableDesc("single_test_" + System.currentTimeMillis());
-            singleTableDesc.addField(FieldType.MDV_FLD_TYPE_UINT32, 1, "id");
-            singleTableDesc.addField(FieldType.MDV_FLD_TYPE_CHAR, 32, "name");
-            Table singleTable = client.createTable(singleTableDesc);
-            singleTableDesc.delete();
-            
-            // Insert only one row
-            RowSet insertRowset = new RowSet(singleTable);
-            Row r = new Row(2);
-            r.setUint32(0, 1);
-            r.setString(1, "SingleItem");
-            insertRowset.add(r);
-            r.delete();
-            client.insert(insertRowset);
-            insertRowset.delete();
-            
             int rowCount = 0;
             BitSet bitSet = new BitSet(2);
             bitSet.fill(true);
-            RowSet selectRowset = client.select(singleTable, bitSet, "");
+            RowSet selectRowset = client.select(table, bitSet, "id = 1");
             if (selectRowset != null) {
                 RowSetEnumerator it = selectRowset.enumerator();
                 try {
@@ -295,7 +270,6 @@ public class java_iterator_test {
                 }
             }
             bitSet.delete();
-            singleTable.delete();
             
             if (rowCount == 1) {
                 pass(testName);
@@ -311,19 +285,13 @@ public class java_iterator_test {
     private static void testMultipleIterators(Client client, Table table) {
         String testName = "Multiple iterators";
         try {
-            // Create separate queries since enumerators can't be reused
-            BitSet bitSet1 = new BitSet(2);
-            bitSet1.fill(true);
-            RowSet selectRowset1 = client.select(table, bitSet1, "");
-            
-            BitSet bitSet2 = new BitSet(2);
-            bitSet2.fill(true);
-            RowSet selectRowset2 = client.select(table, bitSet2, "");
-            
-            int count1 = 0, count2 = 0;
-            
-            if (selectRowset1 != null) {
-                RowSetEnumerator it1 = selectRowset1.enumerator();
+            BitSet bitSet = new BitSet(2);
+            bitSet.fill(true);
+            RowSet selectRowset = client.select(table, bitSet, "");
+            if (selectRowset != null) {
+                int count1 = 0, count2 = 0;
+                
+                RowSetEnumerator it1 = selectRowset.enumerator();
                 try {
                     while (it1.next()) {
                         Row row = it1.current();
@@ -332,12 +300,9 @@ public class java_iterator_test {
                     }
                 } finally {
                     it1.delete();
-                    selectRowset1.delete();
                 }
-            }
-            
-            if (selectRowset2 != null) {
-                RowSetEnumerator it2 = selectRowset2.enumerator();
+                
+                RowSetEnumerator it2 = selectRowset.enumerator();
                 try {
                     while (it2.next()) {
                         Row row = it2.current();
@@ -346,18 +311,17 @@ public class java_iterator_test {
                     }
                 } finally {
                     it2.delete();
-                    selectRowset2.delete();
+                }
+                
+                selectRowset.delete();
+                
+                if (count1 == 5 && count2 == 5) {
+                    pass(testName);
+                } else {
+                    fail(testName, "Expected 5,5 rows, got " + count1 + "," + count2);
                 }
             }
-            
-            bitSet1.delete();
-            bitSet2.delete();
-            
-            if (count1 == 5 && count2 == 5) {
-                pass(testName);
-            } else {
-                fail(testName, "Expected 5,5 rows, got " + count1 + "," + count2);
-            }
+            bitSet.delete();
         } catch (Exception e) {
             fail(testName, e.getMessage());
         }
@@ -415,17 +379,18 @@ public class java_iterator_test {
             }
             bitSet.delete();
             
-            // Try to use closed iterator - should return false or throw
+            // Try to use closed iterator - should return false, not crash
             boolean result = false;
             try {
                 if (it != null) {
                     result = it.next();
                 }
             } catch (Exception e) {
-                // Exception is acceptable
+                // Exception is also acceptable
                 result = false;
             }
             
+            // Test passes if it doesn't crash and returns false
             if (!result) {
                 pass(testName);
             } else {

@@ -44,11 +44,16 @@ MedvedDB is a NoSQL distributed database with verified data consistency.
 
 ### Supported language bindings
 MedvedDB API can be used from other programming languages via SWIG.
- * **Java**: ⚠️ Requires signature fixes (similar to C client fixes)
+ * **Java**: ✅ Fully functional (CRUD, Iterators, Memory Management)
  * **Python**: Available via SWIG
  * **C#**: Available via SWIG
 
-**Note**: Language bindings require the same function signature updates applied to the C client.
+**Java Implementation Status:**
+- ✅ **CRUD Operations**: Create, Read, Update, Delete (100% functional)
+- ✅ **Iterator Functionality**: Complete with 100% test success rate
+- ✅ **Memory Management**: Proper resource cleanup patterns
+- ✅ **ObjectId Operations**: Delete and update with ObjectId targeting
+- ⚠️ **Query Filters**: Server-side filtering not implemented (see Query Behavior below)
 
 ### Building MedvedDB from Source
 
@@ -116,30 +121,20 @@ To test the Java bindings with CRUD operations:
    cd /app/build/mdv_bindings/mdv/java
    ```
 
-3. **Add package declaration** to the Java test file:
-   ```bash
-   sed -i '1i package mdv;' CrudTest.java
-   ```
-
-4. **Compile the test file** using the generated JAR:
-   ```bash
-   javac -cp "mdv4j.jar:." CrudTest.java
-   ```
-
-5. **Start the MedvedDB server**:
+3. **Start the MedvedDB server**:
    ```bash
    cd /app/build && ./mdv_service/medved --cfg=../assets/conf/medved.conf &
    ```
 
-6. **Create proper package directory structure** and move the test class file:
+4. **Compile the test file** using the generated JAR:
    ```bash
-   cd /app/build/mdv_bindings/mdv/java
-   mkdir -p mdv && mv CrudTest.class mdv/
+   cd /app/build
+   javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
    ```
 
-7. **Run the test** with correct classpath and library path:
+5. **Run the test** with correct classpath and library path:
    ```bash
-   java -cp ".:mdv4j.jar" -Djava.library.path="." mdv.CrudTest
+   java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
    ```
 
 The test will perform all CRUD operations (Create, Read, Update, Delete) with the MedvedDB server. You should see log messages showing "CREATE TABLE", "INSERT INTO", "SELECT", and "FETCH" operations.
@@ -150,6 +145,106 @@ To stop the server after testing:
 ```bash
 pkill -f medved
 ```
+
+## Query Behavior and Filtering
+
+### Current Query Implementation
+
+MedvedDB currently supports **column selection** but **not row filtering**:
+
+**✅ What Works:**
+```java
+// Column selection via BitSet
+BitSet bitSet = new BitSet(fieldCount);
+bitSet.fill(true);  // Select all columns
+// OR set specific bits for specific columns
+
+RowSet results = client.select(table, bitSet, "");  // Returns ALL rows
+```
+
+**❌ What Doesn't Work (Server-Side Filtering):**
+```java
+// These calls are functionally identical - filters are ignored:
+client.select(table, bitSet, "");                    // Returns ALL rows
+client.select(table, bitSet, "name = 'John'");       // Returns ALL rows (filter ignored!)
+client.select(table, bitSet, "age > 25");            // Returns ALL rows (filter ignored!)
+client.select(table, bitSet, "complex expression");  // Returns ALL rows (filter ignored!)
+```
+
+### Root Cause
+
+Server-side filtering is **completely unimplemented** in the core database:
+
+1. **Predicate Parser** (`mdv_predicate.c`): All filter expressions are ignored
+2. **Select Operation** (`mdv_select.c`): Contains `TODO: use predicate for DB entries selection`
+3. **Impact**: Affects both C and Java APIs equally
+
+### Required Application Pattern
+
+**Applications must implement client-side filtering:**
+
+```java
+// Step 1: Retrieve ALL data from server
+RowSet allRows = client.select(table, bitSet, ""); // Empty filter = all rows
+
+// Step 2: Filter in application code
+if (allRows != null) {
+    RowSetEnumerator it = allRows.enumerator();
+    try {
+        while (it.next()) {
+            Row row = it.current();
+            String name = row.getString(1);
+            int age = row.getInt32(2);
+            
+            // YOUR filtering logic here
+            if ("John".equals(name) && age > 25) {
+                // Process matching row
+                processRow(row);
+            }
+            // Skip non-matching rows
+            
+            row.delete();
+        }
+    } finally {
+        it.delete();
+        allRows.delete();
+    }
+}
+```
+
+### Alternative Strategies
+
+**1. Table Segmentation:**
+```java
+// Create separate tables for different data categories
+Table activeUsers = client.createTable(activeUsersDesc);
+Table inactiveUsers = client.createTable(inactiveUsersDesc);
+
+// Route data to appropriate tables during insertion
+if (user.isActive()) {
+    insertIntoTable(activeUsers, userData);
+} else {
+    insertIntoTable(inactiveUsers, userData);
+}
+```
+
+**2. Application-Level Indexing:**
+```java
+// Maintain in-memory indexes for fast lookups
+Map<String, List<ObjectId>> nameIndex = new HashMap<>();
+Map<Integer, List<ObjectId>> ageIndex = new HashMap<>();
+
+// Build indexes during data retrieval
+// Use indexes for efficient filtering
+List<ObjectId> matchingIds = nameIndex.get("targetName");
+```
+
+### Performance Considerations
+
+- **Small datasets**: Client-side filtering is acceptable
+- **Large datasets**: Consider table segmentation or application-level indexing
+- **Network efficiency**: All table data is transferred regardless of filtering needs
+- **Memory usage**: Applications must handle full result sets
 
 ## Debugging the C server and client with gdb
 

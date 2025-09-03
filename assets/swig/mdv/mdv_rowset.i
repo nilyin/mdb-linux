@@ -96,6 +96,7 @@ typedef struct {} mdv_rows_enumerator;
 }
 
 %newobject mdv_rows_enumerator::current;
+%newobject mdv_rows_enumerator::row_id;
 
 %extend mdv_rows_enumerator
 {
@@ -108,8 +109,17 @@ typedef struct {} mdv_rows_enumerator;
 
     mdv_datums * current()
     {
+        if (!$self || !$self->enumerator || !$self->table) {
+            return 0;
+        }
         mdv_row              *row    = mdv_enumerator_current($self->enumerator);
+        if (!row) {
+            return 0;
+        }
         mdv_table_desc const *desc   = mdv_table_description($self->table);
+        if (!desc) {
+            return 0;
+        }
         mdv_datums           *datums = new_mdv_datums(desc->size);
 
         if (datums)
@@ -138,13 +148,26 @@ typedef struct {} mdv_rows_enumerator;
 
     bool next()
     {
+        if (!$self || !$self->enumerator) {
+            return false;
+        }
         return mdv_enumerator_next($self->enumerator) == MDV_OK;
     }
 
-    mdv_objid row_id()
+    mdv_objid * row_id()
     {
+        if (!$self || !$self->enumerator) {
+            return 0;
+        }
         mdv_objid const *id = mdv_enumerator_row_id($self->enumerator);
-        return *id;
+        if (!id) {
+            return 0;
+        }
+        mdv_objid *copy = malloc(sizeof(mdv_objid));
+        if (copy) {
+            *copy = *id;
+        }
+        return copy;
     }
 
 }
