@@ -33,7 +33,7 @@ mdv_evt_select * mdv_evt_select_create(mdv_uuid const  *session,
         event->session      = *session;
         event->request_id   = request_id;
         event->table        = *table;
-        event->fields       = mdv_bitset_retain(fields);
+        event->fields       = fields ? mdv_bitset_retain(fields) : NULL;
         event->filter       = data_space;
     }
 
@@ -53,7 +53,7 @@ uint32_t mdv_evt_select_release(mdv_evt_select *evt)
 
     uint32_t rc = mdv_event_release(&evt->base);
 
-    if (!rc)
+    if (!rc && fields)
         mdv_bitset_release(fields);
 
     return rc;

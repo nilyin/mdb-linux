@@ -14,7 +14,7 @@
 #include "mdv_row.h"
 #include "mdv_table.h"
 #include <mdv_def.h>
-#include <mdv_enumerator.h>
+typedef struct mdv_enumerator mdv_enumerator;
 #include <mdv_list.h>
 #include <stdatomic.h>
 
@@ -23,7 +23,12 @@
 typedef int (*mdv_row_filter)(void *arg, mdv_row const *row_slice);
 
 
-typedef mdv_list_entry(mdv_row) mdv_rowlist_entry;
+typedef struct
+{
+    mdv_list_entry_base base;
+    mdv_objid           row_id;
+    mdv_row             data;
+} mdv_rowlist_entry;
 
 
 /// Set of rows

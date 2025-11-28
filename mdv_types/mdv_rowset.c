@@ -1,4 +1,5 @@
 #include "mdv_rowset.h"
+#include <mdv_enumerator.h>
 #include <mdv_alloc.h>
 #include <mdv_log.h>
 #include <assert.h>
@@ -21,6 +22,7 @@ typedef struct
     mdv_enumerator          base;       ///< Base type for rowset enumerator
     mdv_rowset_impl        *rowset;     ///< Set of rows
     mdv_rowlist_entry      *current;    ///< Current row
+    mdv_objid               row_id;     ///< Current row identifier
 } mdv_rowset_enumerator_impl;
 
 
@@ -57,6 +59,32 @@ static uint32_t mdv_rowset_impl_release(mdv_rowset *rowset)
 static void mdv_rowset_impl_emplace(mdv_rowset *rowset, mdv_rowlist_entry *entry)
 {
     mdv_rowset_impl *impl = (mdv_rowset_impl *)rowset;
+    
+    // Validate row entry before adding to rowset
+    if (!entry) {
+        MDV_LOGE("Cannot emplace NULL row entry");
+        return;
+    }
+    
+    MDV_LOGI("DEBUG: Emplacing row entry=%p", entry);
+    
+    // Validate row field pointers to prevent stale data
+    mdv_table_desc const *desc = mdv_table_description(impl->table);
+    for (uint32_t i = 0; i < desc->size; ++i) {
+        MDV_LOGI("DEBUG: Field %u: ptr=%p, size=%u", i, entry->data.fields[i].ptr, entry->data.fields[i].size);
+        
+        if (entry->data.fields[i].ptr) {
+            uintptr_t ptr_val = (uintptr_t)entry->data.fields[i].ptr;
+            
+            // Check for obviously invalid pointers - allow all heap pointers
+            if (ptr_val < 0x1000 || ptr_val > 0x7fffffffffff) {
+                MDV_LOGE("Rejecting row with invalid pointer in field %u: %p", i, entry->data.fields[i].ptr);
+                mdv_free(entry);
+                return;
+            }
+        }
+    }
+    
     mdv_list_emplace_back(&impl->rows, (mdv_list_entry_base*)entry);
 }
 
@@ -96,6 +124,8 @@ static size_t mdv_rowset_impl_append(mdv_rowset *rowset, mdv_data const **rows, 
             MDV_LOGE("No memory for new row");
             return appended;
         }
+
+        entry->row_id = (mdv_objid){0};
 
         char *dataspace = (char *)(entry->data.fields + cols);
 
@@ -169,7 +199,10 @@ static mdv_errno mdv_rowset_enumerator_impl_next(mdv_enumerator *enumerator)
     if (!impl->current)
         impl->current = (mdv_rowlist_entry*)rows->next;
     else
-        impl->current = (mdv_rowlist_entry*)impl->current->next;
+        impl->current = (mdv_rowlist_entry*)impl->current->base.next;
+
+    if (impl->current)
+        impl->row_id = impl->current->row_id;
 
     return impl->current ? MDV_OK : MDV_FAILED;
 }
@@ -178,7 +211,22 @@ static mdv_errno mdv_rowset_enumerator_impl_next(mdv_enumerator *enumerator)
 static void * mdv_rowset_enumerator_impl_current(mdv_enumerator *enumerator)
 {
     mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    if (impl->current) {
+        MDV_LOGI("DEBUG: Returning row from enumerator: entry=%p, row=%p", impl->current, &impl->current->data);
+        
+        // Log field pointers for debugging - only log first 2 fields to avoid garbage
+        for (uint32_t i = 0; i < 2; ++i) {
+            MDV_LOGI("DEBUG: Retrieved field %u: ptr=%p, size=%u", i, impl->current->data.fields[i].ptr, impl->current->data.fields[i].size);
+        }
+    }
     return impl->current ? &impl->current->data : 0;
+}
+
+
+static mdv_objid const * mdv_rowset_enumerator_impl_row_id(mdv_enumerator *enumerator)
+{
+    mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    return &impl->row_id;
 }
 
 
@@ -200,7 +248,8 @@ static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset *rowset)
         .release = mdv_rowset_enumerator_impl_release,
         .reset = mdv_rowset_enumerator_impl_reset,
         .next = mdv_rowset_enumerator_impl_next,
-        .current = mdv_rowset_enumerator_impl_current
+        .current = mdv_rowset_enumerator_impl_current,
+        .row_id = mdv_rowset_enumerator_impl_row_id
     };
 
     enumerator->base.vptr = &vtbl;

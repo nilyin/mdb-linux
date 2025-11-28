@@ -34,7 +34,7 @@ MU_TEST(op_scan_seq)
     }
 
     mdv_op *scanner = mdv_scan_seq(storage);
-    mu_check(scanner);
+    mu_check(scanner != NULL);
 
     mdv_kvdata kvdata;
 

@@ -17,6 +17,7 @@
 #include <mdv_mutex.h>
 #include <mdv_safeptr.h>
 #include <mdv_systbls.h>
+#include <stdatomic.h>
 
 
 /// DB tables space
@@ -62,7 +63,8 @@ enum
 {
     MDV_OP_TABLE_CREATE = 0,    ///< Create table
     MDV_OP_TABLE_DROP,          ///< Drop table
-    MDV_OP_ROW_INSERT           ///< Insert data into a table
+    MDV_OP_ROW_INSERT,          ///< Insert data into a table
+    MDV_OP_ROW_DELETE           ///< Delete data from a table
 };
 
 
@@ -83,6 +85,12 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
  * @brief Insert new record into the transaction log for data insertion into the table.
  */
 static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid const *table_id, binn *rows);
+
+
+/**
+ * @brief Insert new record into the transaction log for data deletion from the table.
+ */
+static mdv_errno mdv_tablespace_log_delete(mdv_tablespace *tablespace, mdv_uuid const *table_id, mdv_objid const *row_id);
 
 
 static mdv_hashmap/*<mdv_storage_id>*/ * mdv_tablespace_storage_ids(mdv_topology *topology)
@@ -256,6 +264,27 @@ static mdv_errno mdv_tablespace_evt_table_get(void *arg, mdv_event *event)
     else
         get_table->table = mdv_tables_get(tablespace->tables, &get_table->table_id);
 
+    if (!get_table->table)
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: tablespace_evt_table_get: requested table '%s' not found",
+                 mdv_uuid_to_str(&get_table->table_id, uuid_str));
+
+        /* Log TR log state for current tablespace to help diagnose ordering/visibility issues */
+        mdv_trlog *trlog = mdv_tablespace_trlog(tablespace, &tablespace->uuid);
+
+        if (trlog)
+        {
+            uint64_t top = mdv_trlog_top(trlog);
+            uint32_t tid = mdv_trlog_id(trlog);
+            MDV_LOGI("DEBUG: tablespace trlog id=%u top=%llu", tid, top);
+            mdv_trlog_release(trlog);
+        }
+
+        /* Log a small sample of registered table UUIDs for diagnosis */
+        mdv_tables_log_sample(tablespace->tables, 8);
+    }
+
     return get_table->table ? MDV_OK : MDV_FAILED;
 }
 
@@ -270,7 +299,7 @@ static mdv_errno mdv_tablespace_evt_table_create(void *arg, mdv_event *event)
     if (table)
     {
         char uuid_str[MDV_UUID_STR_LEN];
-        MDV_LOGI("New table '%s' is created", mdv_uuid_to_str(mdv_table_uuid(table), uuid_str));
+        MDV_LOGI("New table_uuid='%s' is created", mdv_uuid_to_str(mdv_table_uuid(table), uuid_str));
         create_table->table_id = *mdv_table_uuid(table);
         mdv_table_release(table);
         return MDV_OK;
@@ -296,6 +325,14 @@ static mdv_errno mdv_tablespace_evt_rowdata_insert(void *arg, mdv_event *event)
     mdv_tablespace          *tablespace  = arg;
     mdv_evt_rowdata_ins_req *rowdata_ins = (mdv_evt_rowdata_ins_req *)event;
     return mdv_tablespace_log_rowset(tablespace, &rowdata_ins->table_id, rowdata_ins->rows);
+}
+
+
+static mdv_errno mdv_tablespace_evt_rowdata_delete(void *arg, mdv_event *event)
+{
+    mdv_tablespace          *tablespace  = arg;
+    mdv_evt_rowdata_del_req *rowdata_del = (mdv_evt_rowdata_del_req *)event;
+    return mdv_tablespace_log_delete(tablespace, &rowdata_del->table_id, &rowdata_del->row_id);
 }
 
 
@@ -356,6 +393,7 @@ static const mdv_event_handler_type mdv_tablespace_handlers[] =
     { MDV_EVT_TABLE_CREATE,   mdv_tablespace_evt_table_create },
     { MDV_EVT_TABLES_GET,     mdv_tablespace_evt_tables_get },
     { MDV_EVT_ROWDATA_INSERT, mdv_tablespace_evt_rowdata_insert },
+    { MDV_EVT_ROWDATA_DELETE, mdv_tablespace_evt_rowdata_delete },
     { MDV_EVT_ROWDATA_GET,    mdv_tablespace_evt_rowdata_get },
     { MDV_EVT_TRLOG_GET,      mdv_tablespace_evt_trlog_get },
     { MDV_EVT_TRLOG_APPLY,    mdv_tablespace_evt_trlog_apply },
@@ -566,10 +604,59 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
     op->type = MDV_OP_TABLE_CREATE;
     memcpy(op->payload, binn_ptr(&obj), binn_obj_size);
 
+    /* Diagnostic: log new table creation and UUID */
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: tablespace_log_create_table: creating table '%s'", mdv_uuid_to_str(&uuid, uuid_str));
+    }
+
     if (!mdv_trlog_add_op(trlog, op))
     {
         mdv_rollback(rollbacker);
         return 0;
+    }
+
+    /* Diagnostic: log that create op was appended to TR log */
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        uint64_t trpos = mdv_trlog_top(trlog) - 1;
+        MDV_LOGI("DEBUG: tablespace_log_create_table: appended table='%s' trpos=%llu", mdv_uuid_to_str(&uuid, uuid_str), trpos);
+    }
+
+    /* Directly register the table in mdv_tables to ensure immediate visibility */
+    {
+        mdv_data const data =
+        {
+            .size = binn_size(&obj),
+            .ptr = binn_ptr(&obj)
+        };
+
+        if (mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK)
+        {
+            MDV_LOGI("DEBUG: Table table_uuid='%s' directly registered in mdv_tables", mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+        }
+        else
+        {
+            MDV_LOGE("Failed to register table in mdv_tables");
+        }
+    }
+
+    /* Initialize rowdata storage for the new table to prevent LMDB open failures */
+    {
+        MDV_LOGI("DEBUG: Initializing rowdata storage at path: %s", MDV_CONFIG.storage.rowdata ? MDV_CONFIG.storage.rowdata : "NULL");
+
+        mdv_rowdata *rowdata = mdv_rowdata_open(MDV_CONFIG.storage.rowdata, &uuid);
+        if (rowdata)
+        {
+            MDV_LOGI("DEBUG: Rowdata storage initialized for table_uuid='%s'", mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+            mdv_rowdata_release(rowdata);
+        }
+        else
+        {
+            MDV_LOGE("Failed to initialize rowdata storage for table_uuid='%s' at path: %s",
+                     mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}),
+                     MDV_CONFIG.storage.rowdata ? MDV_CONFIG.storage.rowdata : "NULL");
+        }
     }
 
     mdv_table_retain(table);
@@ -582,6 +669,37 @@ static mdv_table * mdv_tablespace_log_create_table(mdv_tablespace *tablespace, m
 
 static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid const *table_id, binn *rowset)
 {
+    // Debug: Check incoming rowset
+    size_t rowset_len = mdv_binn_list_length(rowset);
+    int rowset_size = binn_size(rowset);
+    MDV_LOGI("DEBUG: TABLESPACE - log_rowset: rowset_len=%zu, rowset_size=%d, rowset=%p", 
+             rowset_len, rowset_size, rowset);
+    
+    if (rowset_len == 0) {
+        MDV_LOGE("CRITICAL: TABLESPACE received empty rowset from client!");
+        return MDV_FAILED;
+    }
+    
+    // Debug: Validate each row in the received rowset
+    binn_iter iter;
+    binn row_item;
+    int row_idx = 0;
+    binn_list_foreach(rowset, row_item) {
+        size_t row_list_len = mdv_binn_list_length(&row_item);
+        MDV_LOGI("DEBUG: TABLESPACE ROW %d - list_len=%zu, size=%d", 
+                 row_idx, row_list_len, binn_size(&row_item));
+        if (row_list_len == 0) {
+            MDV_LOGE("CRITICAL: TABLESPACE received empty row %d in rowset!", row_idx);
+        }
+        row_idx++;
+    }
+    
+    // Debug: Validate rowset structure
+    if (!binn_is_valid(rowset, NULL, NULL, NULL)) {
+        MDV_LOGE("DEBUG: TABLESPACE - Invalid rowset structure!");
+        return MDV_FAILED;
+    }
+    
     mdv_rollbacker *rollbacker = mdv_rollbacker_create(3);
 
     mdv_trlog *trlog = mdv_tablespace_trlog_create(tablespace, &tablespace->uuid);
@@ -606,7 +724,7 @@ static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid 
 
     uint64_t id = 0;
 
-    mdv_errno err = mdv_rowdata_reserve(rowdata, mdv_binn_list_length(rowset), &id);
+    mdv_errno err = mdv_rowdata_reserve(rowdata, rowset_len, &id);
 
     if (err != MDV_OK)
     {
@@ -639,6 +757,57 @@ static mdv_errno mdv_tablespace_log_rowset(mdv_tablespace *tablespace, mdv_uuid 
     memcpy(payload, &id, sizeof id);                        payload += sizeof id;
     memcpy(payload, table_id, sizeof *table_id);            payload += sizeof *table_id;
     memcpy(payload, binn_ptr(rowset), binn_rowset_size);    payload += binn_rowset_size;
+
+    if (!mdv_trlog_add_op(trlog, op))
+    {
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollback(rollbacker);
+
+    return MDV_OK;
+}
+
+
+static mdv_errno mdv_tablespace_log_delete(mdv_tablespace *tablespace, mdv_uuid const *table_id, mdv_objid const *row_id)
+{
+    MDV_LOGI("DEBUG: TABLESPACE - log_delete: table_id=%016llx%016llx, row_id={node=%u, id=%llu}", 
+             table_id->u64[0], table_id->u64[1], row_id->node, row_id->id);
+    
+    mdv_rollbacker *rollbacker = mdv_rollbacker_create(2);
+
+    mdv_trlog *trlog = mdv_tablespace_trlog_create(tablespace, &tablespace->uuid);
+
+    if (!trlog)
+    {
+        mdv_rollback(rollbacker);
+        return MDV_FAILED;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_trlog_release, trlog);
+
+    size_t const op_size = offsetof(mdv_trlog_op, payload)
+                            + sizeof *table_id
+                            + sizeof *row_id;
+
+    mdv_trlog_op *op = mdv_alloc(op_size);
+
+    if (!op)
+    {
+        mdv_rollback(rollbacker);
+        return MDV_NO_MEM;
+    }
+
+    mdv_rollbacker_push(rollbacker, mdv_free, op);
+
+    op->size = op_size;
+    op->type = MDV_OP_ROW_DELETE;
+
+    uint8_t *payload = op->payload;
+
+    memcpy(payload, table_id, sizeof *table_id);    payload += sizeof *table_id;
+    memcpy(payload, row_id, sizeof *row_id);        payload += sizeof *row_id;
 
     if (!mdv_trlog_add_op(trlog, op))
     {
@@ -688,7 +857,33 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                     .ptr = binn_ptr(&obj)
                 };
 
-                ret = mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK;
+                /* Diagnostic: log attempt to apply table create from TR log */
+                {
+                    char uuid_str[MDV_UUID_STR_LEN];
+                    MDV_LOGI("DEBUG: trlog_apply: applying table create uuid=%s", mdv_uuid_to_str(&uuid, uuid_str));
+                }
+
+                /* Handle case where table already exists in LMDB */
+                mdv_table *existing_table = mdv_tables_get(tablespace->tables, &uuid);
+                if (existing_table) {
+                    /* Table already exists, just update the in-memory reference */
+                    ret = true;
+                    mdv_table_release(existing_table);
+                    MDV_LOGI("DEBUG: trlog_apply: table uuid=%s already exists in mdv_tables, skipping add_raw",
+                             mdv_uuid_to_str(&uuid, (char[MDV_UUID_STR_LEN]){0}));
+                } else {
+                    ret = mdv_tables_add_raw(tablespace->tables, &uuid, &data) == MDV_OK;
+                }
+
+                /* Diagnostic: log result of adding table to mdv_tables */
+                {
+                    char uuid_str[MDV_UUID_STR_LEN];
+                    MDV_LOGI("DEBUG: trlog_apply: mdv_tables_add_raw uuid=%s add_raw_res=%d",
+                             mdv_uuid_to_str(&uuid, uuid_str), ret);
+                }
+
+                /* Log sample of registered tables after apply attempt */
+                mdv_tables_log_sample(tablespace->tables, 8);
             }
             else
                 MDV_LOGE("Table creation failed. Invalid TR log operation.");
@@ -717,6 +912,12 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                 MDV_LOGE("Invalid rowset");
                 break;
             }
+            
+            // Debug: Check rowset after loading from transaction log
+            size_t loaded_rowset_len = mdv_binn_list_length(&rowset);
+            int loaded_rowset_size = binn_size(&rowset);
+            MDV_LOGI("DEBUG: TRLOG_APPLY - Loaded rowset: len=%zu, size=%d, id=%llu, node_id=%u", 
+                     loaded_rowset_len, loaded_rowset_size, id, context->node_id);
 
             mdv_rowdata *rowdata = mdv_tablespace_rowdata_create(tablespace, &table_id);
 
@@ -727,13 +928,72 @@ static bool mdv_tablespace_trlog_apply(void *arg, mdv_trlog_op *op)
                     .node = context->node_id,
                     .id = id
                 };
+                
+                MDV_LOGI("DEBUG: TRLOG_APPLY - Calling mdv_rowdata_add_raw_rowset with rowid.node=%u, rowid.id=%llu", 
+                         rowid.node, rowid.id);
 
+                // CRITICAL FIX: Keep binn data alive during batch operation
+                // The batch iterator returns pointers directly into binn memory
+                // We must not free the binn until after the batch operation completes
                 ret = mdv_rowdata_add_raw_rowset(rowdata, &rowid, &rowset) == MDV_OK;
+                
+                if (!ret) {
+                    MDV_LOGE("DEBUG: TRLOG_APPLY - mdv_rowdata_add_raw_rowset FAILED!");
+                }
 
                 mdv_rowdata_release(rowdata);
             }
 
+            // CRITICAL: Only free binn AFTER batch operation completes
+            // This ensures all pointers returned by mdv_rowdata_batch_next remain valid
             binn_free(&rowset);
+
+            break;
+        }
+
+        case MDV_OP_ROW_DELETE:
+        {
+            uint8_t *payload = op->payload;
+
+            mdv_uuid table_id;
+            mdv_objid row_id;
+
+            memcpy(&table_id, payload, sizeof table_id);    payload += sizeof table_id;
+            memcpy(&row_id, payload, sizeof row_id);        payload += sizeof row_id;
+
+            MDV_LOGI("DEBUG: TRLOG_APPLY - DELETE: table_uuid=%016llx%016llx, row_id={node=%u, id=%llu}",
+                     table_id.u64[0], table_id.u64[1], row_id.node, row_id.id);
+
+            mdv_rowdata *rowdata = mdv_tablespace_rowdata_create(tablespace, &table_id);
+
+            if (rowdata)
+            {
+                mdv_errno delete_result = mdv_rowdata_delete(rowdata, &row_id);
+
+                // DELETE operations are idempotent - if row doesn't exist, it's not an error
+                if (delete_result == MDV_OK)
+                {
+                    ret = true;
+                    MDV_LOGI("DEBUG: TRLOG_APPLY - DELETE: row deleted successfully");
+                }
+                else if (delete_result == MDV_NOT_FOUND)
+                {
+                    ret = true;  // Idempotent - row already doesn't exist
+                    MDV_LOGI("DEBUG: TRLOG_APPLY - DELETE: row not found (idempotent success)");
+                }
+                else
+                {
+                    ret = false;
+                    MDV_LOGE("DEBUG: TRLOG_APPLY - DELETE: unexpected error %d", delete_result);
+                }
+
+                mdv_rowdata_release(rowdata);
+            }
+            else
+            {
+                MDV_LOGE("Failed to get rowdata for delete operation");
+                ret = false;
+            }
 
             break;
         }

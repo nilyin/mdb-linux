@@ -27,7 +27,7 @@ include(cmake/sanitizer.cmake)
 #*********************************************************
 SET(MAJOR_VERSION 1)
 SET(MINOR_VERSION 0)
-SET(PATCH_VERSION 0)
+SET(PATCH_VERSION 1)
 
 set(VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 
@@ -44,6 +44,24 @@ set(LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mdv_thirdparty)
 #*********************************************************
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+# Option: make RelWithDebInfo the default build type (keeps optimizations + debug symbols)
+option(DEFAULT_BUILD_TYPE_RELWITHDEBINFO "Set default build type to RelWithDebInfo instead of Release" OFF)
+if (DEFAULT_BUILD_TYPE_RELWITHDEBINFO AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+endif()
+
+# Option: enable -g debug symbols injection into compiler flags (safe, opt-in)
+option(ENABLE_DEBUG_SYMBOLS "Add -g flags to C compiler flags to include debug symbols" OFF)
+
+if (ENABLE_DEBUG_SYMBOLS)
+    message(STATUS "ENABLE_DEBUG_SYMBOLS=ON: adding -g to C compiler flags")
+    # Append -g to global flags and per-configuration flags so debug info is present in produced binaries
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g")
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -g")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -g")
 endif()
 
 
@@ -98,6 +116,11 @@ endif()
 macro(use_c11)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
+    # set(CMAKE_C_EXTENSIONS OFF)
+
+    # C11 specific compiler flags
+    # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -Wall -Wextra -Wpedantic -g -O0")
+
 endmacro(use_c11)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

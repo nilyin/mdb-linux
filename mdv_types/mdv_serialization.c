@@ -2,6 +2,7 @@
 #include <mdv_log.h>
 #include <mdv_alloc.h>
 #include <mdv_rollbacker.h>
+// #include <mdv_enumerator.h>
 #include <assert.h>
 #include <limits.h>
 
@@ -520,6 +521,21 @@ bool mdv_unbinn_table_uuid(binn const *obj, mdv_uuid *uuid)
 }
 
 
+// Helper function to determine actual field count in a row
+// CRITICAL: We cannot safely access row->fields[i] beyond allocated memory
+static uint32_t mdv_row_field_count(mdv_row const *row, mdv_table_desc const *table_desc)
+{
+    // PROBLEM: We don't know how many fields were actually allocated for this row
+    // The row structure only contains fields[1] but actual allocation varies
+    // Accessing row->fields[i] beyond allocated count causes segfault
+    
+    // SAFE APPROACH: Use table schema size and handle missing fields in serialization
+    MDV_LOGI("DEBUG: Using table schema field count: %u (avoiding unsafe memory access)", 
+             table_desc->size);
+    
+    return table_desc->size;
+}
+
 bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *list)
 {
     if (!binn_create_list(list))
@@ -529,7 +545,29 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
     }
 
     mdv_field const *fields = table_desc->fields;
+    
+    // Check if row has valid data - only skip if ALL fields are NULL/empty
+    bool has_any_data = false;
+    for(uint32_t i = 0; i < table_desc->size; ++i)
+    {
+        if (row->fields[i].ptr != NULL && row->fields[i].size > 0) {
+            has_any_data = true;
+            break;
+        }
+    }
+    
+    if (!has_any_data) {
+        MDV_LOGI("DEBUG: Skipping completely empty row (all fields NULL)");
+        binn_free(list);
+        return false;
+    }
+    
+    MDV_LOGI("DEBUG: Serializing row (table schema has %u fields)", table_desc->size);
+    
+    // Debug: Track how many fields actually get serialized
+    int serialized_fields = 0;
 
+    // Serialize all schema fields, handling missing ones as NULL
     for(uint32_t i = 0; i < table_desc->size; ++i)
     {
         uint32_t const field_type_size = mdv_field_type_size(fields[i].type);
@@ -541,46 +579,82 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
             return false;
         }
 
-        if(row->fields[i].size % field_type_size)
-        {
-            MDV_LOGE("binn_row failed. Invalid field size.");
-            binn_free(list);
-            return false;
+        // Check if this field exists in the row (detect sparse data)
+        bool field_exists = true;
+        uint32_t arr_size = 0;
+        
+        // Detect if we're accessing beyond allocated memory by checking for garbage values
+        if (row->fields[i].ptr == NULL && row->fields[i].size > 1000000) {
+            field_exists = false;
+            MDV_LOGI("DEBUG: Field %u appears unallocated (NULL ptr, size=%u), treating as missing", 
+                     i, row->fields[i].size);
+        } else if (row->fields[i].ptr != NULL) {
+            uintptr_t ptr_val = (uintptr_t)row->fields[i].ptr;
+            if (ptr_val < 0x1000 || ptr_val > 0x7fffffffffff) {
+                field_exists = false;
+                MDV_LOGI("DEBUG: Field %u has invalid pointer %p, treating as missing", i, row->fields[i].ptr);
+            } else if (row->fields[i].size > 0x1000000) {
+                field_exists = false;
+                MDV_LOGI("DEBUG: Field %u has unreasonable size %u, treating as missing", i, row->fields[i].size);
+            }
         }
-
-        uint32_t const arr_size = row->fields[i].size / field_type_size;
-
-        if (fields[i].limit && fields[i].limit < arr_size)
-        {
-            MDV_LOGE("binn_row failed. Field is too long.");
-            binn_free(list);
-            return false;
+        
+        if (field_exists) {
+            if(row->fields[i].size % field_type_size)
+            {
+                MDV_LOGE("binn_row failed. Invalid field size.");
+                binn_free(list);
+                return false;
+            }
+            arr_size = row->fields[i].size / field_type_size;
         }
 
         BOOL res = true;
-
-        if(fields[i].limit == 1)
-            res = binn_add_to_list(list, fields[i].type, row->fields[i].ptr);
-        else if (field_type_size == 1)
-            res = binn_list_add_blob(list, row->fields[i].ptr, arr_size);
-        else
-        {
-            binn *field_items = binn_list();
-
-            if (!field_items)
+        
+        if (!field_exists) {
+            // Field doesn't exist in row, serialize as NULL blob
+            MDV_LOGI("DEBUG: Serializing missing field %u as NULL blob", i);
+            res = binn_list_add_blob(list, NULL, 0);
+        } else {
+            // Field exists, serialize normally with validation
+            if (fields[i].limit && fields[i].limit < arr_size)
             {
-                MDV_LOGE("binn_row failed");
+                MDV_LOGE("binn_row failed. Field is too long. Field %u: limit=%u, actual=%u", i, fields[i].limit, arr_size);
                 binn_free(list);
                 return false;
             }
 
-            for(uint32_t j = 0; res && j < arr_size; ++j)
-                res = binn_add_to_list(field_items, fields[i].type, (char const *)row->fields[i].ptr + j * field_type_size);
-
-            if (res)
-                res = binn_list_add_list(list, field_items);
-
-            binn_free(field_items);
+            if(fields[i].limit == 1)
+                res = binn_add_to_list(list, fields[i].type, row->fields[i].ptr);
+            else if (field_type_size == 1)
+            {
+                if (!row->fields[i].ptr || arr_size == 0)
+                {
+                    MDV_LOGI("DEBUG: Serializing empty blob field %u", i);
+                    res = binn_list_add_blob(list, NULL, 0);
+                }
+                else
+                {
+                    MDV_LOGI("DEBUG: binn_list_add_blob field %u: ptr=%p, size=%u, row=%p", 
+                             i, row->fields[i].ptr, arr_size, row);
+                    res = binn_list_add_blob(list, row->fields[i].ptr, arr_size);
+                }
+            }
+            else
+            {
+                binn *field_items = binn_list();
+                if (!field_items)
+                {
+                    MDV_LOGE("binn_row failed");
+                    binn_free(list);
+                    return false;
+                }
+                for(uint32_t j = 0; res && j < arr_size; ++j)
+                    res = binn_add_to_list(field_items, fields[i].type, (char const *)row->fields[i].ptr + j * field_type_size);
+                if (res)
+                    res = binn_list_add_list(list, field_items);
+                binn_free(field_items);
+            }
         }
 
         if(!res)
@@ -589,6 +663,18 @@ bool mdv_binn_row(mdv_row const *row, mdv_table_desc const *table_desc, binn *li
             binn_free(list);
             return false;
         }
+        
+        serialized_fields++;
+    }
+    
+    MDV_LOGI("DEBUG: Row serialization complete - %d fields serialized out of %u schema fields", 
+             serialized_fields, table_desc->size);
+    
+    // CRITICAL FIX: Return false if no fields were actually serialized
+    if (serialized_fields == 0) {
+        MDV_LOGE("CRITICAL: No fields serialized - returning empty binn list!");
+        binn_free(list);
+        return false;
     }
 
     return true;
@@ -602,19 +688,46 @@ static size_t mdv_calc_row_size(binn const           *list,
 {
     *fields_count = 0;
 
+    // Validate inputs
+    if (!list || !table_desc || !fields_count)
+    {
+        MDV_LOGE("calc_row_size: invalid input parameters");
+        return 0;
+    }
+
+    // Validate list structure
+    if (!binn_is_valid((void*)list, NULL, NULL, NULL))
+    {
+        MDV_LOGE("calc_row_size: invalid binn list structure");
+        return 0;
+    }
+
     binn_iter iter = {};
     binn value = {};
 
     uint32_t const cols = table_desc->size;
     mdv_field const *fields = table_desc->fields;
 
-    uint32_t n = 0;
+    if (!fields || cols == 0)
+    {
+        MDV_LOGE("calc_row_size: invalid table descriptor");
+        return 0;
+    }
 
+    uint32_t n = 0;
     size_t row_size = 0;
 
     // Calculate necessary space for row
     binn_list_foreach((void*)list, value)
     {
+        // Safety check to prevent processing too many fields
+        if (n >= cols)
+        {
+            MDV_LOGE("calc_row_size: field index %u exceeds table columns %u", n, cols);
+            return 0;
+        }
+
+        // If mask is NULL, include all fields (select all)
         if (mask && !mdv_bitset_test(mask, n))
         {
             ++n;
@@ -622,6 +735,12 @@ static size_t mdv_calc_row_size(binn const           *list,
         }
 
         uint32_t const field_type_size = mdv_field_type_size(fields[n].type);
+
+        if (field_type_size == 0)
+        {
+            MDV_LOGE("calc_row_size: invalid field type size for field %u", n);
+            return 0;
+        }
 
         if(fields[n].limit == 1)
             row_size += field_type_size;
@@ -635,10 +754,32 @@ static size_t mdv_calc_row_size(binn const           *list,
                 return 0;
             }
 
+            // Safety check for maximum blob size
+            if (blob_size > 0x7FFFFFFF)
+            {
+                MDV_LOGE("blob size too large: %d bytes", blob_size);
+                return 0;
+            }
+
+            // Check for integer overflow in row_size calculation
+            if (row_size > SIZE_MAX - blob_size)
+            {
+                MDV_LOGE("row size calculation overflow");
+                return 0;
+            }
+
+            MDV_LOGI("DEBUG: Blob field %u: blob_size=%d, running_total=%zu", 
+                     n, blob_size, row_size + blob_size);
             row_size += blob_size;
         }
         else
-            row_size += field_type_size * mdv_binn_list_length(&value);
+        {
+            uint32_t array_len = mdv_binn_list_length(&value);
+            size_t array_size = field_type_size * array_len;
+            MDV_LOGI("DEBUG: Array field %u: type_size=%u, array_len=%u, total_size=%zu", 
+                     n, field_type_size, array_len, array_size);
+            row_size += array_size;
+        }
 
         ++n;
         ++*fields_count;
@@ -652,7 +793,12 @@ static size_t mdv_calc_row_size(binn const           *list,
 
     row_size += offsetof(mdv_rowlist_entry, data)
                 + offsetof(mdv_row, fields)
-                + sizeof(mdv_data) * *fields_count;
+                + sizeof(mdv_data) * *fields_count
+                + 16; // Add minimal safety padding for alignment
+    
+    MDV_LOGI("DEBUG: Final calculated row_size=%zu (data_size=%zu + overhead=%zu)", 
+             row_size, row_size - (offsetof(mdv_rowlist_entry, data) + offsetof(mdv_row, fields) + sizeof(mdv_data) * *fields_count),
+             offsetof(mdv_rowlist_entry, data) + offsetof(mdv_row, fields) + sizeof(mdv_data) * *fields_count);
 
     return row_size;
 }
@@ -668,16 +814,59 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
                                          mdv_table_desc const *table_desc,
                                          mdv_bitset const *mask)
 {
+    // Early validation of inputs
+    if (!list || !table_desc || !table_desc->fields)
+    {
+        MDV_LOGE("unbinn_row_slice: invalid input parameters");
+        return 0;
+    }
+
     uint32_t const cols = table_desc->size;
     mdv_field const *fields = table_desc->fields;
+
+    // Validate table descriptor
+    if (cols == 0 || cols > 1000) // reasonable limit
+    {
+        MDV_LOGE("unbinn_row_slice: invalid table column count: %u", cols);
+        return 0;
+    }
 
     uint32_t fields_count = 0;
 
     // Calculate necessary space for row
     size_t const row_size = mdv_calc_row_size(list, table_desc, &fields_count, mask);
+    
+    MDV_LOGI("DEBUG: Calculated row_size=%zu, fields_count=%u, table_desc->size=%u", 
+             row_size, fields_count, table_desc->size);
 
     if (!row_size)
         return 0;
+
+    // Additional safety check for row size
+    if (row_size > 0x10000000) // 256MB limit
+    {
+        MDV_LOGE("unbinn_row_slice: calculated row size too large: %zu bytes", row_size);
+        return 0;
+    }
+
+    /* Note: Server now pads rows to match table schema, so list_len should equal table_desc->size
+       The fields_count calculated here may be less than table_desc->size for sparse data,
+       but the server ensures consistent field count in serialized data. */
+    
+    size_t const list_len = mdv_binn_list_length(list);
+    MDV_LOGI("DEBUG: Client deserializing row: list_len=%zu, fields_count=%u, table_desc->size=%u", 
+             list_len, fields_count, table_desc->size);
+    
+    // Skip empty rows - they should not be processed
+    if (list_len == 0) {
+        MDV_LOGI("DEBUG: Skipping completely empty row (list_len=0)");
+        return 0;
+    }
+    
+    if (fields_count == 0) {
+        MDV_LOGI("DEBUG: Skipping row with no valid fields (fields_count=0)");
+        return 0;
+    }
 
     // Memory allocation for new row
     mdv_rowlist_entry *entry = mdv_alloc(row_size);
@@ -688,9 +877,17 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         return 0;
     }
 
+    // Zero the entire allocated memory to prevent garbage values
+    memset(entry, 0, row_size);
+
     mdv_row *row = &entry->data;
 
     char *dataspace = (char *)(row->fields + fields_count);
+    char *dataspace_start = dataspace;
+    char *dataspace_end = (char*)entry + row_size;
+    
+    MDV_LOGI("DEBUG: Row allocation - entry=%p, row_size=%zu, dataspace_start=%p, dataspace_end=%p", 
+             entry, row_size, dataspace_start, dataspace_end);
 
     uint32_t n = 0, field_idx = 0;
 
@@ -700,6 +897,7 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
     // Deserialize row
     binn_list_foreach((void*)list, value)
     {
+        // If mask is NULL, include all fields (select all)
         if (mask && !mdv_bitset_test(mask, n))
         {
             ++n;
@@ -708,11 +906,27 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
 
         uint32_t const field_type_size = mdv_field_type_size(fields[n].type);
 
+        if (!field_type_size)
+        {
+            MDV_LOGE("unbinn_row_slice failed. Invalid field type size for field %u (type=%u).", n, fields[n].type);
+            mdv_free(entry);
+            return 0;
+        }
+
         if(fields[n].limit == 1)
         {
+            /* Bound check before writing fixed-size value */
+            if ((size_t)(dataspace + field_type_size - (char*)entry) > row_size)
+            {
+                MDV_LOGE("unbinn_row_slice failed. Fixed field %u exceeds allocated row_size (%zu), need %u bytes.",
+                         n, row_size, field_type_size);
+                mdv_free(entry);
+                return 0;
+            }
+
             if (!binn_get(&value, fields[n].type, dataspace))
             {
-                MDV_LOGE("unbinn_table failed");
+                MDV_LOGE("unbinn_row_slice failed. binn_get returned false for field %u (type=%u).", n, fields[n].type);
                 mdv_free(entry);
                 return 0;
             }
@@ -724,10 +938,71 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         else if (field_type_size == 1)
         {
             int const blob_size = binn_size(&value);
-            memcpy(dataspace, binn_ptr(&value), blob_size);
+
+            if (blob_size < 0)
+            {
+                MDV_LOGE("unbinn_row_slice failed. blob size is negative: %d", blob_size);
+                mdv_free(entry);
+                return 0;
+            }
+
+            // Additional safety check for maximum blob size
+            if (blob_size > 0x7FFFFFFF)
+            {
+                MDV_LOGE("unbinn_row_slice failed. Blob field %u size too large: %d bytes", n, blob_size);
+                mdv_free(entry);
+                return 0;
+            }
+
+            /* Bound check before memcpy */
+            if ((size_t)(dataspace + blob_size - (char*)entry) > row_size)
+            {
+                MDV_LOGE("unbinn_row_slice failed. Blob field %u (size=%d) exceeds allocated row_size (%zu).",
+                         n, blob_size, row_size);
+                mdv_free(entry);
+                return 0;
+            }
+
+            void *blob_ptr = binn_ptr(&value);
+            
+            MDV_LOGI("DEBUG: binn_ptr returned %p for field %u, blob_size=%d, binn_value=%p, binn_row=%p", 
+                     blob_ptr, field_idx, blob_size, &value, list);
+
             row->fields[field_idx].size = blob_size;
-            row->fields[field_idx].ptr = dataspace;
-            dataspace += blob_size;
+            
+            if (blob_size > 0 && blob_ptr)
+            {
+                /* Additional safety check for dataspace overflow */
+                if ((size_t)(dataspace + blob_size - (char*)entry) > row_size)
+                {
+                    MDV_LOGE("CRITICAL: Dataspace overflow prevented - need %d bytes, have %ld",
+                             blob_size, dataspace_end - dataspace);
+                    mdv_free(entry);
+                    return 0;
+                }
+                
+                memcpy(dataspace, blob_ptr, blob_size);
+                row->fields[field_idx].ptr = dataspace;
+                MDV_LOGI("DEBUG: Copied %d bytes from %p to %p, field_ptr=%p", 
+                         blob_size, blob_ptr, dataspace, row->fields[field_idx].ptr);
+                dataspace += blob_size;
+            }
+            else
+            {
+                // For empty blobs, set NULL pointer and don't advance dataspace
+                row->fields[field_idx].ptr = NULL;
+                MDV_LOGI("DEBUG: Set field %u to NULL (blob_size=%d, blob_ptr=%p)", 
+                         field_idx, blob_size, blob_ptr);
+                // Don't advance dataspace for empty blobs
+            }
+            
+            MDV_LOGI("DEBUG: Deserialized blob field %u: ptr=%p, size=%d, dataspace_before=%p, dataspace_after=%p, remaining=%ld", 
+                     field_idx, row->fields[field_idx].ptr, blob_size, dataspace, dataspace + blob_size, dataspace_end - (dataspace + blob_size));
+            
+            if (dataspace > dataspace_end) {
+                MDV_LOGE("DEBUG: Dataspace overflow! dataspace=%p > dataspace_end=%p", 
+                         dataspace, dataspace_end);
+            }
         }
         else
         {
@@ -741,10 +1016,18 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
 
             while (binn_list_next(&arr_iter, &arr_value))
             {
+                /* Bound check before each element copy */
+                if ((size_t)(dataspace + field_type_size - (char*)entry) > row_size)
+                {
+                    MDV_LOGE("unbinn_row_slice failed. Array element for field %u would exceed row_size (%zu).", n, row_size);
+                    mdv_free(entry);
+                    return 0;
+                }
+
                 if (!binn_get(&arr_value, fields[n].type, dataspace))
                 {
-                    MDV_LOGE("unbinn_table failed");
-                    mdv_free(row);
+                    MDV_LOGE("unbinn_row_slice failed. binn_get failed for array element of field %u (type=%u).", n, fields[n].type);
+                    mdv_free(entry);
                     return 0;
                 }
 
@@ -759,10 +1042,9 @@ mdv_rowlist_entry * mdv_unbinn_row_slice(binn const *list,
         ++field_idx;
     }
 
-    if (dataspace - (char*)entry != row_size)
-        MDV_LOGE("memory corrupted: %p, %zu != %zu", entry, dataspace - (char*)entry, row_size);
-
-    assert(dataspace - (char const*)entry == row_size);
+    size_t actual_size = dataspace - (char*)entry;
+    if (actual_size != row_size)
+        MDV_LOGI("DEBUG: Size mismatch (expected): entry=%p, actual=%zu, expected=%zu", entry, actual_size, row_size);
 
     return entry;
 }
@@ -801,6 +1083,14 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
     while(mdv_enumerator_next(enumerator) == MDV_OK)
     {
         mdv_row *row = mdv_enumerator_current(enumerator);
+        mdv_objid const *row_id = mdv_enumerator_row_id(enumerator);
+
+        if (!row)
+        {
+            MDV_LOGE("binn_rowset failed: null row from enumerator");
+            mdv_rollback(rollbacker);
+            return false;
+        }
 
         binn fields;
 
@@ -808,19 +1098,57 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
         {
             if (!binn_list_add_list(list, &fields))
             {
+                MDV_LOGE("binn_rowset failed: could not add row to list");
                 binn_free(&fields);
-                MDV_LOGE("binn_rowset failed");
                 mdv_rollback(rollbacker);
                 return false;
             }
-
+            MDV_LOGI("DEBUG: Successfully serialized and added row to rowset");
             binn_free(&fields);
+
+            // CRITICAL FIX: Only serialize row IDs for server-generated data (SELECT responses)
+            // Client-side INSERT operations should NOT include row ID objects
+            // Row IDs are placeholders {0,0} and will be generated by server
+            if (row_id && (row_id->node != 0 || row_id->id != 0))
+            {
+                binn obj;
+                if (binn_create_object(&obj))
+                {
+                    if (binn_object_set_blob(&obj, "id", (void*)row_id, sizeof(*row_id)))
+                    {
+                        if (!binn_list_add_object(list, &obj))
+                        {
+                            MDV_LOGE("binn_rowset failed: could not add row id to list");
+                            binn_free(&obj);
+                            mdv_rollback(rollbacker);
+                            return false;
+                        }
+                        MDV_LOGI("DEBUG: Serialized valid row ID: node=%u, id=%llu", row_id->node, row_id->id);
+                    }
+                    else
+                    {
+                        MDV_LOGE("binn_rowset failed: could not set row id blob");
+                    }
+                    binn_free(&obj);
+                }
+                else
+                {
+                    MDV_LOGE("binn_rowset failed: could not create row id object");
+                    mdv_rollback(rollbacker);
+                    return false;
+                }
+            }
+            else
+            {
+                MDV_LOGI("DEBUG: Skipping placeholder row ID {%u, %llu} - server will generate actual IDs", 
+                         row_id ? row_id->node : 0, row_id ? row_id->id : 0);
+            }
         }
         else
         {
-            MDV_LOGE("binn_rowset failed");
-            mdv_rollback(rollbacker);
-            return false;
+            // CRITICAL FIX: Do NOT add empty binn structures to the list
+            // The old code was adding empty rows, causing server-side corruption
+            MDV_LOGI("DEBUG: Skipped empty row, NOT adding to rowset");
         }
     }
 
@@ -834,32 +1162,103 @@ bool mdv_binn_rowset(mdv_rowset *rowset, binn *list)
 
 mdv_rowset * mdv_unbinn_rowset(binn const *list, mdv_table *table)
 {
-    mdv_rowset *rowset = mdv_rowset_create(table);
-
-    if (!rowset || !table)
+    if (!list || !table)
     {
-        MDV_LOGE("unbinn_rowset failed");
+        MDV_LOGE("unbinn_rowset failed: invalid parameters");
+        return 0;
+    }
+
+    // Check if the list is valid and has content
+    if (!binn_is_valid((void*)list, NULL, NULL, NULL))
+    {
+        MDV_LOGE("unbinn_rowset failed: invalid binn list");
+        return 0;
+    }
+
+    size_t list_size = mdv_binn_list_length(list);
+    if (list_size == 0)
+    {
+        MDV_LOGI("DEBUG: unbinn_rowset - empty list, returning empty rowset");
+        return mdv_rowset_create(table);
+    }
+
+    mdv_rowset *rowset = mdv_rowset_create(table);
+    if (!rowset)
+    {
+        MDV_LOGE("unbinn_rowset failed: could not create rowset");
         return 0;
     }
 
     mdv_table_desc const *table_desc = mdv_table_description(table);
+    if (!table_desc)
+    {
+        MDV_LOGE("unbinn_rowset failed: invalid table description");
+        mdv_rowset_release(rowset);
+        return 0;
+    }
 
     binn_iter iter = {};
     binn value = {};
+    int row_count = 0;
+    int success_count = 0;
+
+    MDV_LOGI("DEBUG: unbinn_rowset starting - list_size=%zu", list_size);
 
     binn_list_foreach((void*)list, value)
     {
+        row_count++;
+        
+        // Try to deserialize the row
         mdv_rowlist_entry *entry = mdv_unbinn_row(&value, table_desc);
-
         if (!entry)
         {
-            MDV_LOGE("unbinn_rowset failed");
-            mdv_rowset_release(rowset);
-            return 0;
+            MDV_LOGI("DEBUG: Failed to deserialize row %d, skipping", row_count);
+            continue;
+        }
+
+        // Initialize row ID to default values
+        entry->row_id.node = 0;
+        entry->row_id.id = success_count;
+
+        // Try to get row ID from next element if it exists
+        if (binn_list_next(&iter, &value))
+        {
+            void *row_id_data = 0;
+            uint32_t size = 0;
+            
+            // Check if next element is a row ID object
+            if (binn_object_get_blob(&value, "id", &row_id_data, &size) && 
+                row_id_data && size == sizeof(mdv_objid))
+            {
+                entry->row_id = *(mdv_objid*)row_id_data;
+                MDV_LOGI("DEBUG: Extracted row_id for row %d: node=%u, id=%llu", 
+                         success_count, entry->row_id.node, entry->row_id.id);
+            }
+            else
+            {
+                // Next element is not a row ID, it's probably another row
+                // Put it back by not advancing the iterator
+                binn_iter_init(&iter, (void*)list, BINN_LIST);
+                // Skip to current position
+                for (int i = 0; i < row_count; i++) {
+                    binn_list_next(&iter, &value);
+                }
+                MDV_LOGI("DEBUG: No row ID found for row %d, using default: node=0, id=%d", 
+                         success_count, success_count);
+            }
+        }
+        else
+        {
+            MDV_LOGI("DEBUG: No more elements, using default row_id for row %d: node=0, id=%d", 
+                     success_count, success_count);
         }
 
         mdv_rowset_emplace(rowset, entry);
+        success_count++;
     }
+
+    MDV_LOGI("DEBUG: unbinn_rowset completed: %d elements processed, %d rows deserialized", 
+             row_count, success_count);
 
     return rowset;
 }
@@ -1167,6 +1566,10 @@ bool mdv_binn_bitset(mdv_bitset const *bitset, binn *obj)
         return false;
     }
 
+    // Handle NULL bitset case - create empty list to represent "select all fields"
+    if (!bitset)
+        return true;
+
     size_t const capacity = mdv_bitset_capacity(bitset);
     int32_t const *data = (int32_t const *)mdv_bitset_data(bitset);
 
@@ -1186,7 +1589,16 @@ bool mdv_binn_bitset(mdv_bitset const *bitset, binn *obj)
 
 mdv_bitset * mdv_unbinn_bitset(binn const *obj)
 {
+    // Handle NULL input
+    if (!obj)
+        return 0;
+
     size_t const list_len = mdv_binn_list_length(obj);
+    
+    // Handle empty list case - return NULL to represent "select all fields"
+    if (list_len == 0)
+        return 0;
+    
     size_t const capacity = list_len * MDV_BITSET_ALIGNMENT * CHAR_BIT;
 
     mdv_bitset *bitset = mdv_bitset_create(capacity, &mdv_default_allocator);

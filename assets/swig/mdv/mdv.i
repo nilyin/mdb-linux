@@ -4,6 +4,7 @@
 #include <mdv_client.h>
 %}
 
+%include "mdv_objid.i"
 %include "mdv_client.i"
 %include "mdv_uuid.i"
 

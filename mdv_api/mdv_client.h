@@ -112,6 +112,35 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset);
 
 
 /**
+ * @brief Deletes row from the given table
+ * @details This function implements deletion functionality.
+ *
+ * @param client [in]    DB client
+ * @param table [in]     table descriptor
+ * @param row_id [in]    row identifier
+ *
+ * @return On success, return MDV_OK.
+ * @return On error, return non zero value
+ */
+mdv_errno mdv_delete(mdv_client *client, mdv_table *table, mdv_objid const *row_id);
+
+
+/**
+ * @brief Updates row in the given table
+ * @details This function implements update functionality.
+ *
+ * @param client [in]    DB client
+ * @param table [in]     table descriptor
+ * @param row_id [in]    row identifier
+ * @param rowset [in]    new data
+ *
+ * @return On success, return MDV_OK.
+ * @return On error, return non zero value
+ */
+mdv_errno mdv_update(mdv_client *client, mdv_table *table, mdv_objid const *row_id, mdv_rowset *rowset);
+
+
+/**
  * @brief Creates table rows iterator
  *
  * @param client [in]           DB client
@@ -123,7 +152,11 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset);
  * @return On success, return nonzero pointer to result set (mdv_rowset's set)
  * @return On error, return NULL pointer
  */
-mdv_rowset * mdv_select(mdv_client *client,
-                        mdv_table  *table,
-                        mdv_bitset *fields,
-                        char const *filter);
+mdv_rowset * mdv_dbclient_select(mdv_client *client,
+                               mdv_table  *table,
+                               mdv_bitset *fields,
+                               char const *filter);
+
+
+
+

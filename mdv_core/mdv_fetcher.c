@@ -419,6 +419,12 @@ static mdv_errno mdv_fetcher_evt_select(void *arg, mdv_event *event)
     uint32_t view_id = ~0u;
     char const *err_msg = "";
 
+    /* Diagnostic log: record table UUID as received by fetcher */
+    {
+        char uuid_str[MDV_UUID_STR_LEN];
+        MDV_LOGI("DEBUG: fetcher_evt_select requested table '%s'", mdv_uuid_to_str(&select->table, uuid_str));
+    }
+
     mdv_errno err = mdv_fetcher_view_create(fetcher,
                                             &select->table,
                                             select->fields,

@@ -1,0 +1,720 @@
+#include "mdv_perf.h"
+#include "perf_config.h"
+// #include <minunit.h>
+#include <mdv_client.h>
+#include <mdv_log.h>
+#include <mdv_table.h>
+#include <mdv_rowset.h>
+#include <mdv_enumerator.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+
+// DEFAULT_PERF_CONFIG is provided as a macro in perf_config.h.
+// Initialize g_config at runtime in mdv_run_performance_tests().
+static mdv_client *g_client = NULL;
+static mdv_table *g_table = NULL;
+static mdv_perf_config g_config;
+static mdv_perf_metrics g_test_results[8];
+static const char* g_test_names[] = {
+    "Bulk Inserts", "Single Inserts", "Single Updates", "Bulk Updates",
+    "Bulk Reads", "Single Reads", "Single Deletes", "Delete All"
+};
+
+long mdv_perf_get_memory_usage(void) {
+    FILE *file = fopen("/proc/self/status", "r");
+    if (!file) return 0;
+    
+    char line[128];
+    long memory_kb = 0;
+    while (fgets(line, sizeof(line), file)) {
+        if (strncmp(line, "VmRSS:", 6) == 0) {
+            sscanf(line, "VmRSS: %ld kB", &memory_kb);
+            break;
+        }
+    }
+    fclose(file);
+    return memory_kb / 1024; // Convert to MB
+}
+
+void mdv_perf_monitor_start(mdv_perf_monitor *monitor) {
+    gettimeofday(&monitor->start_time, NULL);
+    getrusage(RUSAGE_SELF, &monitor->start_usage);
+    monitor->start_memory = mdv_perf_get_memory_usage();
+}
+
+void mdv_perf_monitor_stop(mdv_perf_monitor *monitor) {
+    gettimeofday(&monitor->end_time, NULL);
+    getrusage(RUSAGE_SELF, &monitor->end_usage);
+    monitor->end_memory = mdv_perf_get_memory_usage();
+}
+
+void mdv_perf_calculate_metrics(mdv_perf_monitor *monitor, mdv_perf_metrics *metrics) {
+    // Calculate time in milliseconds
+    double time_ms = (monitor->end_time.tv_sec - monitor->start_time.tv_sec) * 1000.0 +
+                     (monitor->end_time.tv_usec - monitor->start_time.tv_usec) / 1000.0;
+    
+    // Calculate CPU usage percentage
+    double user_time = (monitor->end_usage.ru_utime.tv_sec - monitor->start_usage.ru_utime.tv_sec) +
+                       (monitor->end_usage.ru_utime.tv_usec - monitor->start_usage.ru_utime.tv_usec) / 1000000.0;
+    double sys_time = (monitor->end_usage.ru_stime.tv_sec - monitor->start_usage.ru_stime.tv_sec) +
+                      (monitor->end_usage.ru_stime.tv_usec - monitor->start_usage.ru_stime.tv_usec) / 1000000.0;
+    double cpu_percent = ((user_time + sys_time) / (time_ms / 1000.0)) * 100.0;
+    
+    metrics->min_time_ms = metrics->max_time_ms = metrics->avg_time_ms = time_ms;
+    metrics->min_cpu_percent = metrics->max_cpu_percent = metrics->avg_cpu_percent = cpu_percent;
+    metrics->min_memory_mb = metrics->max_memory_mb = metrics->avg_memory_mb = monitor->end_memory;
+    metrics->sample_count = 1;
+}
+
+void mdv_perf_update_metrics(mdv_perf_metrics *total, mdv_perf_metrics *sample) {
+    if (total->sample_count == 0) {
+        *total = *sample;
+        return;
+    }
+    
+    // Update min/max values
+    if (sample->min_time_ms < total->min_time_ms) total->min_time_ms = sample->min_time_ms;
+    if (sample->max_time_ms > total->max_time_ms) total->max_time_ms = sample->max_time_ms;
+    if (sample->min_cpu_percent < total->min_cpu_percent) total->min_cpu_percent = sample->min_cpu_percent;
+    if (sample->max_cpu_percent > total->max_cpu_percent) total->max_cpu_percent = sample->max_cpu_percent;
+    if (sample->min_memory_mb < total->min_memory_mb) total->min_memory_mb = sample->min_memory_mb;
+    if (sample->max_memory_mb > total->max_memory_mb) total->max_memory_mb = sample->max_memory_mb;
+    
+    // Update averages
+    total->avg_time_ms = (total->avg_time_ms * total->sample_count + sample->avg_time_ms) / (total->sample_count + 1);
+    total->avg_cpu_percent = (total->avg_cpu_percent * total->sample_count + sample->avg_cpu_percent) / (total->sample_count + 1);
+    total->avg_memory_mb = (total->avg_memory_mb * total->sample_count + sample->avg_memory_mb) / (total->sample_count + 1);
+    
+    total->sample_count++;
+}
+
+void mdv_perf_print_metrics(const char *operation, mdv_perf_metrics *metrics, int operation_count, int error_count) {
+    double per_op_time = metrics->avg_time_ms / operation_count;
+    printf("✅ %s: %.2f ms total (%.4f ms per operation, %.2f%% CPU, %ld MB, %d errors)\n", 
+           operation, metrics->avg_time_ms, per_op_time, metrics->avg_cpu_percent, metrics->avg_memory_mb, error_count);
+}
+
+static int setup_test_environment(void) {
+    mdv_client_config config = {
+        .db = { .addr = "tcp://127.0.0.1:4800" },
+        .connection = { .response_timeout = 10, .retry_interval = 1, .keepidle = 1, .keepcnt = 1, .keepintvl = 1 },
+        .threadpool = { .size = 2 }
+    };
+    
+    g_client = mdv_client_connect(&config);
+    if (!g_client) {
+        MDV_LOGE("Failed to connect client");
+        return 0;
+    }
+    
+    mdv_field fields[] = {
+        { MDV_FLD_TYPE_CHAR, 0, "name" },
+        { MDV_FLD_TYPE_UINT32, 4, "age" },
+        { MDV_FLD_TYPE_UINT64, 8, "timestamp" }
+    };
+    
+    mdv_table_desc table_desc = {
+        .name = "perf_test",
+        .size = sizeof fields / sizeof *fields,
+        .fields = fields
+    };
+    
+    g_table = mdv_create_table(g_client, &table_desc);
+    if (!g_table) {
+        MDV_LOGE("Failed to create table");
+        return 0;
+    }
+    
+    MDV_LOGI("Table created successfully");
+    return 1;
+}
+
+static void cleanup_test_environment(void) {
+    if (g_table) mdv_table_release(g_table);
+    if (g_client) mdv_client_close(g_client);
+}
+
+void mdv_perf_test_bulk_inserts(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int batches = g_config.bulk_total_inserts / g_config.bulk_batch_size;
+    int error_count = 0;
+    
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+        
+        for (int batch = 0; batch < batches; batch++) {
+            mdv_rowset *rowset = mdv_rowset_create(g_table);
+            
+            // CRITICAL FIX: Allocate separate storage for each row's numeric values
+            uint32_t *age_values = malloc(g_config.bulk_batch_size * sizeof(uint32_t));
+            uint64_t *timestamp_values = malloc(g_config.bulk_batch_size * sizeof(uint64_t));
+            
+            for (int i = 0; i < g_config.bulk_batch_size; i++) {
+                char name[256] = {0};
+                snprintf(name, sizeof(name), "User_%d_%d", batch, i);
+                
+                age_values[i] = 20 + (i % 50);
+                timestamp_values[i] = (uint64_t)time(NULL) + batch * 1000 + i;
+                
+                mdv_data row[] = {
+                    { .ptr = name, .size = strlen(name) + 1 },
+                    { .ptr = &age_values[i], .size = 4 },
+                    { .ptr = &timestamp_values[i], .size = 8 }
+                };
+                mdv_data const *rows[] = { row };
+                
+                // Debug: Validate row data before adding to rowset
+                MDV_LOGI("DEBUG: BULK INSERT - Adding row %d: name='%s', age=%u, timestamp=%lu", 
+                         i, name, age_values[i], timestamp_values[i]);
+                MDV_LOGI("DEBUG: BULK INSERT - Row data pointers: name=%p, age=%p, timestamp=%p", 
+                         row[0].ptr, row[1].ptr, row[2].ptr);
+                
+                size_t added = mdv_rowset_append(rowset, rows, 1);
+                if (added != 1) {
+                    MDV_LOGE("CRITICAL: Failed to add row %d to rowset (added=%zu)", i, added);
+                }
+            }
+            
+            if (mdv_insert(g_client, rowset) != MDV_OK) error_count++;
+            mdv_rowset_release(rowset);
+            
+            // Free allocated storage after insert
+            free(age_values);
+            free(timestamp_values);
+        }
+        
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+    }
+    
+    g_test_results[0] = total_metrics;
+    mdv_perf_print_metrics("Bulk Inserts", &total_metrics, g_config.bulk_total_inserts, error_count);
+}
+
+void mdv_perf_test_single_inserts(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+
+        for (int i = 0; i < g_config.single_total_inserts; i++) {
+            mdv_rowset *rowset = mdv_rowset_create(g_table);
+
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "SingleUser_%d_%d", sample, i);
+
+            // CRITICAL FIX: Use static storage for numeric values
+            static uint32_t age_value;
+            static uint64_t timestamp_value;
+
+            age_value = 25 + (i % 40);
+            timestamp_value = (uint64_t)time(NULL) + sample * 1000 + i;
+
+            mdv_data row[] = {
+                { .ptr = name, .size = strlen(name) + 1 },
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp_value, .size = 8 }
+            };
+            mdv_data const *rows[] = { row };
+
+            mdv_rowset_append(rowset, rows, 1);
+            if (mdv_insert(g_client, rowset) != MDV_OK) error_count++;
+            mdv_rowset_release(rowset);
+        }
+
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+    }
+
+    g_test_results[1] = total_metrics;
+    mdv_perf_print_metrics("Single Inserts", &total_metrics, g_config.single_total_inserts, error_count);
+}
+
+void mdv_perf_test_single_updates(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+    
+    // Use EXACT same pattern as Bulk Updates (which works)
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+        
+        int updates = 0;
+        
+        // Same SELECT approach as Bulk Updates
+        mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!select_rowset) {
+            printf("No rows found for updates (sample %d)\n", sample);
+            // Don't return - continue with empty metrics for this sample
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+        
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+        if (!enumerator) {
+            mdv_rowset_release(select_rowset);
+            printf("No enumerator available for updates (sample %d)\n", sample);
+            // Don't return - continue with empty metrics for this sample
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+        
+        // Same enumeration pattern as Bulk Updates
+        while (mdv_enumerator_next(enumerator) == MDV_OK && updates < g_config.single_total_updates) {
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+            
+            if (!id) {
+                error_count++;
+                continue;
+            }
+            
+            mdv_rowset *update_rowset = mdv_rowset_create(g_table);
+            
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "SingleUpdate_%d", updates);
+            uint64_t timestamp = (uint64_t)time(NULL) + updates + 2000000;
+            
+            static uint32_t age_value;
+            age_value = 40 + (updates % 25);
+            
+            mdv_data row[] = {
+                { .ptr = name, .size = strlen(name) + 1 },
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp, .size = 8 }
+            };
+            mdv_data const *rows[] = { row };
+            
+            mdv_rowset_append(update_rowset, rows, 1);
+            if (mdv_update(g_client, g_table, id, update_rowset) != MDV_OK) error_count++;
+            mdv_rowset_release(update_rowset);
+            updates++;
+        }
+        
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(select_rowset);
+        
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (updates == 0) {
+            printf("No rows found for updates (sample %d)\n", sample);
+        }
+    }
+    
+    g_test_results[2] = total_metrics;
+    mdv_perf_print_metrics("Single Updates", &total_metrics, g_config.single_total_updates, error_count);
+}
+
+void mdv_perf_test_bulk_updates(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+
+        // OPTIMIZATION: One SELECT operation, then iterate through all rows
+        mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!select_rowset) {
+            MDV_LOGE("SELECT failed for bulk updates sample %d", sample);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+        if (!enumerator) {
+            MDV_LOGE("Failed to create enumerator for bulk updates sample %d", sample);
+            mdv_rowset_release(select_rowset);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        int updates = 0;
+
+        // Process all rows in batches, but with only ONE SELECT operation
+        while (mdv_enumerator_next(enumerator) == MDV_OK && updates < g_config.bulk_total_updates) {
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+
+            // Skip if no valid row ID (empty/corrupted rows)
+            if (!id) {
+                error_count++;
+                continue;
+            }
+
+            mdv_rowset *update_rowset = mdv_rowset_create(g_table);
+
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "BulkUpdate_%d_%d", sample, updates);
+            uint64_t timestamp = (uint64_t)time(NULL) + sample * 10000 + updates;
+
+            // CRITICAL FIX: Use static storage for numeric values
+            static uint32_t age_value;
+            age_value = 35 + (updates % 30);
+
+            mdv_data row[] = {
+                { .ptr = name, .size = strlen(name) + 1 },
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp, .size = 8 }
+            };
+            mdv_data const *rows[] = { row };
+
+            mdv_rowset_append(update_rowset, rows, 1);
+            if (mdv_update(g_client, g_table, id, update_rowset) != MDV_OK) error_count++;
+            mdv_rowset_release(update_rowset);
+            updates++;
+        }
+
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(select_rowset);
+
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (updates == 0) {
+            printf("No rows found for bulk updates (sample %d)\n", sample);
+        }
+    }
+
+    g_test_results[3] = total_metrics;
+    mdv_perf_print_metrics("Bulk Updates", &total_metrics, g_config.bulk_total_updates, error_count);
+}
+
+void mdv_perf_test_bulk_reads(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+
+        // OPTIMIZATION: One SELECT operation, then iterate through all rows in batches
+        mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!select_rowset) {
+            MDV_LOGE("SELECT failed for bulk reads sample %d", sample);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+        if (!enumerator) {
+            MDV_LOGE("Failed to create enumerator for bulk reads sample %d", sample);
+            mdv_rowset_release(select_rowset);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        int total_reads = 0;
+
+        // Process all rows in batches, but with only ONE SELECT operation
+        while (mdv_enumerator_next(enumerator) == MDV_OK && total_reads < g_config.bulk_total_reads) {
+            // Read operation completed - just advance to next row
+            total_reads++;
+        }
+
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(select_rowset);
+
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (total_reads == 0) {
+            printf("No rows found for bulk reads (sample %d)\n", sample);
+        }
+    }
+
+    g_test_results[4] = total_metrics;
+    mdv_perf_print_metrics("Bulk Reads", &total_metrics, g_config.bulk_total_reads, error_count);
+}
+
+void mdv_perf_test_single_reads(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+
+        // Use SAME pattern as Single Updates: ONE SELECT, then iterate
+        mdv_rowset *select_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!select_rowset) {
+            MDV_LOGE("SELECT failed for single reads sample %d", sample);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(select_rowset);
+        if (!enumerator) {
+            MDV_LOGE("Failed to create enumerator for single reads sample %d", sample);
+            mdv_rowset_release(select_rowset);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        // Read rows one by one using the same enumerator (like Single Updates)
+        int reads_performed = 0;
+        while (mdv_enumerator_next(enumerator) == MDV_OK && reads_performed < g_config.single_total_reads) {
+            // Read operation completed - just advance to next row
+            reads_performed++;
+        }
+
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(select_rowset);
+
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (reads_performed == 0) {
+            printf("No rows found for reads (sample %d)\n", sample);
+        }
+    }
+
+    g_test_results[5] = total_metrics;
+    mdv_perf_print_metrics("Single Reads", &total_metrics, g_config.single_total_reads, error_count);
+}
+
+void mdv_perf_test_single_deletes(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+
+        // Insert fresh data for this sample
+        for (int i = 0; i < g_config.single_total_deletes; i++) {
+            mdv_rowset *insert_rowset = mdv_rowset_create(g_table);
+
+            char name[256] = {0};
+            snprintf(name, sizeof(name), "DeleteTest_%d_%d", sample, i);
+
+            static uint32_t age_value;
+            static uint64_t timestamp_value;
+
+            age_value = 30 + (i % 20);
+            timestamp_value = (uint64_t)time(NULL) + sample * 1000 + i;
+
+            mdv_data row[] = {
+                { .ptr = name, .size = strlen(name) + 1 },
+                { .ptr = &age_value, .size = 4 },
+                { .ptr = &timestamp_value, .size = 8 }
+            };
+            mdv_data const *rows[] = { row };
+
+            mdv_rowset_append(insert_rowset, rows, 1);
+            if (mdv_insert(g_client, insert_rowset) != MDV_OK) {
+                MDV_LOGE("Failed to insert test data for sample %d, row %d", sample, i);
+            }
+            mdv_rowset_release(insert_rowset);
+        }
+
+        int deletes_performed = 0;
+
+        // Select ALL rows (filter parsing seems to be broken)
+        mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!rowset) {
+            MDV_LOGE("SELECT failed for single deletes sample %d", sample);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
+        if (!enumerator) {
+            MDV_LOGE("Failed to create enumerator for single deletes sample %d", sample);
+            mdv_rowset_release(rowset);
+            error_count++;
+            mdv_perf_monitor_stop(&monitor);
+            mdv_perf_metrics sample_metrics = {0};
+            mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+            continue;
+        }
+
+        // Delete only the rows we inserted for this sample
+        while (mdv_enumerator_next(enumerator) == MDV_OK && deletes_performed < g_config.single_total_deletes) {
+            const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+
+            if (!id) {
+                error_count++;
+                continue;
+            }
+
+            // OPTIMIZATION: Remove debug logging that slows down the test
+            if (mdv_delete(g_client, g_table, id) != MDV_OK) {
+                error_count++;
+            } else {
+                deletes_performed++;
+            }
+        }
+
+        mdv_enumerator_release(enumerator);
+        mdv_rowset_release(rowset);
+
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+
+        if (deletes_performed == 0) {
+            printf("No rows found for deletes (sample %d)\n", sample);
+        }
+    }
+
+    g_test_results[6] = total_metrics;
+    mdv_perf_print_metrics("Single Deletes", &total_metrics, g_config.single_total_deletes, error_count);
+}
+
+void mdv_perf_test_delete_all(void) {
+    mdv_perf_metrics total_metrics = {0};
+    int error_count = 0;
+    
+    for (int sample = 0; sample < g_config.measurement_samples; sample++) {
+        mdv_perf_monitor monitor;
+        mdv_perf_monitor_start(&monitor);
+        
+        mdv_rowset *rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+        if (!rowset) {
+            MDV_LOGE("SELECT failed for delete all operation");
+            error_count++;
+        } else {
+            mdv_enumerator *enumerator = mdv_rowset_enumerator(rowset);
+            
+            while (mdv_enumerator_next(enumerator) == MDV_OK) {
+                const mdv_objid *id = mdv_enumerator_row_id(enumerator);
+                if (id && mdv_delete(g_client, g_table, id) != MDV_OK) error_count++;
+                else if (!id) error_count++; // Count NULL row_id as error
+            }
+            
+            mdv_enumerator_release(enumerator);
+            mdv_rowset_release(rowset);
+        }
+        
+        mdv_perf_monitor_stop(&monitor);
+        mdv_perf_metrics sample_metrics;
+        mdv_perf_calculate_metrics(&monitor, &sample_metrics);
+        mdv_perf_update_metrics(&total_metrics, &sample_metrics);
+    }
+    
+    // Count remaining rows for delete all
+    int delete_count = 0;
+    mdv_rowset *count_rowset = mdv_dbclient_select(g_client, g_table, NULL, "");
+    if (count_rowset) {
+        mdv_enumerator *count_enum = mdv_rowset_enumerator(count_rowset);
+        while (mdv_enumerator_next(count_enum) == MDV_OK) delete_count++;
+        mdv_enumerator_release(count_enum);
+        mdv_rowset_release(count_rowset);
+    } else {
+        MDV_LOGE("SELECT failed for counting remaining rows");
+    }
+    
+    g_test_results[7] = total_metrics;
+    mdv_perf_print_metrics("Delete All", &total_metrics, delete_count > 0 ? delete_count : 1, error_count);
+}
+
+void mdv_perf_print_summary_table(void) {
+    // Operation counts for per-operation calculations
+    int op_counts[] = {
+        g_config.bulk_total_inserts,    // Bulk Inserts
+        g_config.single_total_inserts,  // Single Inserts  
+        g_config.single_total_updates,  // Single Updates
+        g_config.bulk_total_updates,    // Bulk Updates
+        g_config.bulk_total_reads,      // Bulk Reads
+        g_config.single_total_reads,    // Single Reads
+        g_config.single_total_deletes,  // Single Deletes
+        1                               // Delete All (estimated)
+    };
+    
+    printf("\n\n=== PERFORMANCE TEST SUMMARY TABLE ===\n");
+    printf("%-15s | %-12s | %-12s | %-12s | %-12s | %-10s | %-10s | %-10s | %-10s | %-10s | %-10s\n",
+           "Operation", "Per Op(ms)", "Min Time(ms)", "Max Time(ms)", "Avg Time(ms)", 
+           "Min CPU(%)", "Max CPU(%)", "Avg CPU(%)", "Min Mem(MB)", "Max Mem(MB)", "Avg Mem(MB)");
+    printf("----------------+-------------+-------------+-------------+-------------+-----------+-----------+-----------+-----------+-----------+-----------\n");
+    
+    for (int i = 0; i < 8; i++) {
+        mdv_perf_metrics *m = &g_test_results[i];
+        double per_op_time = m->avg_time_ms / op_counts[i];
+        printf("%-15s | %11.4f | %11.2f | %11.2f | %11.2f | %9.2f | %9.2f | %9.2f | %9ld | %9ld | %9ld\n",
+               g_test_names[i], per_op_time, m->min_time_ms, m->max_time_ms, m->avg_time_ms,
+               m->min_cpu_percent, m->max_cpu_percent, m->avg_cpu_percent,
+               m->min_memory_mb, m->max_memory_mb, m->avg_memory_mb);
+    }
+    printf("\n");
+}
+
+void mdv_run_performance_tests(void) {
+    printf("=== MedvedDB Performance Test Suite ===\n");
+
+    /* Initialize runtime configuration from the macro-based DEFAULT_PERF_CONFIG.
+       Compound literals/macros cannot be used as compile-time initializers for
+       objects with static storage duration, so we perform assignment at runtime. */
+    g_config = DEFAULT_PERF_CONFIG;
+    
+    // Clean database before test
+    printf("🧹 Cleaning database...\n");
+    system("rm -rf ./data");
+    system("mkdir -p ./data");
+    printf("Configuration:\n");
+    printf("  Bulk batch size: %d\n", g_config.bulk_batch_size);
+    printf("  Bulk inserts: %d\n", g_config.bulk_total_inserts);
+    printf("  Single inserts: %d\n", g_config.single_total_inserts);
+    printf("  Measurement samples: %d\n", g_config.measurement_samples);
+    printf("\n");
+    
+    if (!setup_test_environment()) {
+        printf("Failed to setup test environment\n");
+        return;
+    }
+    
+    mdv_perf_test_bulk_inserts();
+    mdv_perf_test_single_inserts();
+    mdv_perf_test_single_updates();
+    mdv_perf_test_bulk_updates();
+    mdv_perf_test_bulk_reads();
+    mdv_perf_test_single_reads();
+    mdv_perf_test_single_deletes();
+    mdv_perf_test_delete_all();
+    
+    mdv_perf_print_summary_table();
+    cleanup_test_environment();
+}

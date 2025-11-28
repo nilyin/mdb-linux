@@ -19,6 +19,8 @@ typedef struct {} mdv_client;
 %newobject mdv_client::getTable;
 %newobject mdv_client::select;
 
+// %rename("mdv_client_select_impl") mdv_client::select;
+
 %extend mdv_client
 {
     static mdv_client * connect(mdv_client_config const *config);
@@ -42,6 +44,16 @@ typedef struct {} mdv_client;
 
     mdv_rowset * select(mdv_table *table, mdv_bitset *fields, char const *filter)
     {
-        return mdv_select($self, table, fields, filter);
+        return mdv_dbclient_select($self, table, fields, filter);
+    }
+
+    bool delete(mdv_table *table, mdv_objid *row_id)
+    {
+        return mdv_delete($self, table, row_id) == MDV_OK;
+    }
+
+    bool update(mdv_table *table, mdv_objid *row_id, mdv_rowset *rowset)
+    {
+        return mdv_update($self, table, row_id, rowset) == MDV_OK;
     }
 }

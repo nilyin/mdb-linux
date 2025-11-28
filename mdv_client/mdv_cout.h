@@ -2,6 +2,7 @@
 #include <mdv_table.h>
 #include <mdv_rowset.h>
 #include <mdv_limits.h>
+#include <mdv_enumerator.h>
 #include <stdio.h>
 
 

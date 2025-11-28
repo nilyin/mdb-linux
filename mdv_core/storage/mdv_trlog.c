@@ -231,7 +231,11 @@ static void mdv_trlog_id_maximize(mdv_trlog *trlog, uint64_t id)
 
 static void mdv_trlog_applied_pos_set(mdv_trlog *trlog, uint64_t applied_pos)
 {
+    uint64_t old_applied = atomic_load_explicit(&trlog->applied, memory_order_relaxed);
     atomic_store_explicit(&trlog->applied, applied_pos, memory_order_relaxed);
+
+    /* Diagnostic log: record applied position change */
+    MDV_LOGI("DEBUG: trlog_applied_pos_set id=%u old=%llu new=%llu", trlog->id, old_applied, applied_pos);
 
     // Start transaction
     mdv_transaction transaction = mdv_transaction_start(trlog->storage);

@@ -51,7 +51,8 @@ static void mdv_bitset_free(mdv_bitset *bitset)
 
 mdv_bitset * mdv_bitset_retain(mdv_bitset *bitset)
 {
-    atomic_fetch_add_explicit(&bitset->rc, 1, memory_order_acquire);
+    if (bitset)
+        atomic_fetch_add_explicit(&bitset->rc, 1, memory_order_acquire);
     return bitset;
 }
 
@@ -98,6 +99,9 @@ void mdv_bitset_reset(mdv_bitset *bitset, size_t pos)
 
 bool mdv_bitset_test(mdv_bitset const *bitset, size_t pos)
 {
+    if (!bitset)
+        return true; // NULL bitset means "select all fields"
+    
     size_t const b = CHAR_BIT * sizeof *bitset->bits;
     size_t const n = pos / b;
     size_t const offs = pos % b;

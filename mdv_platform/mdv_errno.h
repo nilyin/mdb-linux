@@ -26,6 +26,7 @@ enum
     MDV_BUSY            = -11,  ///< Resource is busy
     MDV_NO_IMPL         = -12,  ///< No implementaion
     MDV_STACK_OVERFLOW  = -13,  ///< Stack overflow
+    MDV_NOT_FOUND       = -14,  ///< Resource not found
 };
 
 

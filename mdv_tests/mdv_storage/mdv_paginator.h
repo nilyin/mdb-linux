@@ -1,6 +1,7 @@
 #pragma once
 #include <minunit.h>
 #include <mdv_paginator.h>
+#include <mdv_filesystem.h>
 
 
 /*
@@ -29,7 +30,7 @@ static void mdv_storage_predicate_test_0()
 MU_TEST(storage_paginator)
 {
     mdv_paginator *paginator = mdv_paginator_open(5, 10, "./test_pages");
-    mu_check(paginator);
+    mu_check(paginator != NULL);
 
     mdv_buffer *buffer = mdv_paginator_allocate(paginator, 6);
     (void)buffer;

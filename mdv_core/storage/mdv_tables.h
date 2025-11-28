@@ -72,6 +72,16 @@ mdv_table * mdv_tables_get(mdv_tables *tables, mdv_uuid const *uuid);
  */
 mdv_table * mdv_tables_desc(mdv_tables *tables);
 
+/**
+ * @brief Diagnostic: log up to max registered table UUIDs from tables storage
+ *
+ * Useful when a lookup fails to inspect which tables are currently registered.
+ *
+ * @param tables [in] Tables storage
+ * @param max    [in] Maximum number of UUIDs to log
+ */
+void mdv_tables_log_sample(mdv_tables *tables, size_t max);
+
 
 /**
  * @brief Rows subset reading

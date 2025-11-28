@@ -32,6 +32,35 @@ uint32_t mdv_evt_rowdata_ins_req_release(mdv_evt_rowdata_ins_req *evt)
 }
 
 
+mdv_evt_rowdata_del_req * mdv_evt_rowdata_del_req_create(mdv_uuid const *table_id, mdv_objid const *row_id)
+{
+    mdv_evt_rowdata_del_req *event = (mdv_evt_rowdata_del_req*)
+                                mdv_event_create(
+                                    MDV_EVT_ROWDATA_DELETE,
+                                    sizeof(mdv_evt_rowdata_del_req));
+
+    if (event)
+    {
+        event->table_id = *table_id;
+        event->row_id = *row_id;
+    }
+
+    return event;
+}
+
+
+mdv_evt_rowdata_del_req * mdv_evt_rowdata_del_req_retain(mdv_evt_rowdata_del_req *evt)
+{
+    return (mdv_evt_rowdata_del_req*)evt->base.vptr->retain(&evt->base);
+}
+
+
+uint32_t mdv_evt_rowdata_del_req_release(mdv_evt_rowdata_del_req *evt)
+{
+    return evt->base.vptr->release(&evt->base);
+}
+
+
 mdv_evt_rowdata * mdv_evt_rowdata_create(mdv_uuid const *table)
 {
     static mdv_ievent vtbl =

@@ -66,6 +66,9 @@ static mdv_errno mdv_select_next(mdv_op *op, mdv_kvdata *kvdata)
 
     *kvdata = current;
 
+    if (kvdata->key.size == sizeof(mdv_objid))
+        memcpy(&kvdata->row_id, kvdata->key.ptr, sizeof(mdv_objid));
+
     return MDV_OK;
 }
 

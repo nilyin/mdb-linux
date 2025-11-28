@@ -10,6 +10,7 @@
  */
 #pragma once
 #include "mdv_def.h"
+#include "../mdv_types/mdv_objid.h"
 #include <stdatomic.h>
 
 
@@ -22,6 +23,7 @@ typedef uint32_t         (*mdv_enumerator_release_fn)(mdv_enumerator *);
 typedef mdv_errno        (*mdv_enumerator_reset_fn)  (mdv_enumerator *);
 typedef mdv_errno        (*mdv_enumerator_next_fn)   (mdv_enumerator *);
 typedef void *           (*mdv_enumerator_current_fn)(mdv_enumerator *);
+typedef mdv_objid const *(*mdv_enumerator_row_id_fn) (mdv_enumerator *);
 
 
 /// Interface for iterators
@@ -32,6 +34,7 @@ typedef struct
     mdv_enumerator_reset_fn     reset;              ///< Function for iterator reset
     mdv_enumerator_next_fn      next;               ///< Function for next iterable entry obtain
     mdv_enumerator_current_fn   current;            ///< Function for current iterable entry obtain
+    mdv_enumerator_row_id_fn    row_id;             ///< Function for current row identifier obtain
 } mdv_ienumerator;
 
 
@@ -47,3 +50,4 @@ uint32_t         mdv_enumerator_release(mdv_enumerator *enumerator);
 mdv_errno        mdv_enumerator_reset(mdv_enumerator *enumerator);
 mdv_errno        mdv_enumerator_next(mdv_enumerator *enumerator);
 void *           mdv_enumerator_current(mdv_enumerator *enumerator);
+mdv_objid const *mdv_enumerator_row_id(mdv_enumerator *enumerator);

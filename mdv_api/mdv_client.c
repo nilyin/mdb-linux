@@ -14,6 +14,7 @@
 #include <mdv_serialization.h>
 #include <mdv_router.h>
 #include <mdv_safeptr.h>
+#include <mdv_enumerator.h>
 #include <signal.h>
 
 
@@ -600,6 +601,28 @@ mdv_hashmap * mdv_get_routes(mdv_client *client)
 mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
 {
     binn serialized_rows;
+    
+    // Debug: Check rowset before serialization
+    mdv_enumerator *debug_enum = mdv_rowset_enumerator(rowset);
+    if (debug_enum) {
+        int row_count = 0;
+        while (mdv_enumerator_next(debug_enum) == MDV_OK) {
+            mdv_row *row = mdv_enumerator_current(debug_enum);
+            if (row) {
+                MDV_LOGI("DEBUG: INSERT - Row %d: field[0].ptr=%p, field[0].size=%u", 
+                         row_count, row->fields[0].ptr, row->fields[0].size);
+                if (row->fields[0].ptr && row->fields[0].size > 0) {
+                    char name_preview[32] = {0};
+                    size_t copy_len = row->fields[0].size < 31 ? row->fields[0].size : 31;
+                    memcpy(name_preview, row->fields[0].ptr, copy_len);
+                    MDV_LOGI("DEBUG: INSERT - Row %d name: '%s'", row_count, name_preview);
+                }
+            }
+            row_count++;
+        }
+        MDV_LOGI("DEBUG: INSERT - Total rows before serialization: %d", row_count);
+        mdv_enumerator_release(debug_enum);
+    }
 
     if (!mdv_binn_rowset(rowset, &serialized_rows))
         return MDV_FAILED;
@@ -621,8 +644,32 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
         return MDV_FAILED;
     }
 
+    // Debug: Check serialized data size BEFORE freeing
+    size_t serialized_size = binn_size(&serialized_rows);
+    size_t list_len = mdv_binn_list_length(&serialized_rows);
+    MDV_LOGI("DEBUG: INSERT - Serialized rowset: size=%zu, list_len=%zu", serialized_size, list_len);
+    
+    // Debug: Inspect each row in the binn list
+    binn_iter iter;
+    binn row_binn;
+    int row_idx = 0;
+    binn_list_foreach(&serialized_rows, row_binn) {
+        int row_field_count = binn_count(&row_binn);
+        int row_size = binn_size(&row_binn);
+        MDV_LOGI("DEBUG: INSERT - Serialized row %d: field_count=%d, size=%d", 
+                 row_idx, row_field_count, row_size);
+        row_idx++;
+    }
+    
+    if (list_len == 0) {
+        MDV_LOGE("CRITICAL: mdv_binn_rowset() failed - empty serialized rowset");
+        binn_free(&serialized_rows);
+        mdv_table_release(table);
+        return MDV_FAILED;
+    }
+    
     binn_free(&serialized_rows);
-
+    
     mdv_msg req =
     {
         .hdr =
@@ -632,6 +679,8 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
         },
         .payload = binn_ptr(&insert_into_msg)
     };
+    
+    MDV_LOGI("DEBUG: INSERT - Message size: %u", req.hdr.size);
 
     mdv_msg resp;
 
@@ -660,6 +709,115 @@ mdv_errno mdv_insert(mdv_client *client, mdv_rowset *rowset)
     }
 
     mdv_table_release(table);
+
+    return err;
+}
+
+
+mdv_errno mdv_delete(mdv_client *client, mdv_table *table, mdv_objid const *row_id)
+{
+    // Debug: Log the row_id being sent in DELETE request
+    MDV_LOGI("DEBUG: DELETE - Sending request for row_id={node=%u, id=%lu}",
+             row_id->node, (unsigned long)row_id->id);
+
+    mdv_msg_delete_from delete_from =
+    {
+        .table = *mdv_table_uuid(table),
+        .row_id = *row_id
+    };
+
+    binn binn_msg;
+
+    if (!mdv_msg_delete_from_binn(&delete_from, &binn_msg))
+        return MDV_FAILED;
+
+    mdv_msg req =
+    {
+        .hdr =
+        {
+            .id = mdv_msg_delete_from_id,
+            .size = binn_size(&binn_msg)
+        },
+        .payload = binn_ptr(&binn_msg)
+    };
+
+    mdv_msg resp;
+
+    mdv_errno err = mdv_client_send(client, &req, &resp, client->response_timeout);
+
+    binn_free(&binn_msg);
+
+    if (err == MDV_OK)
+    {
+        switch(resp.hdr.id)
+        {
+            case mdv_message_id(status):
+            {
+                if (mdv_client_status_handler(&resp, &err) == MDV_OK)
+                    break;
+            }
+
+            default:
+                err = MDV_FAILED;
+                MDV_LOGE("Unexpected response");
+                break;
+        }
+
+        mdv_free_msg(&resp);
+    }
+
+    return err;
+}
+
+
+mdv_errno mdv_update(mdv_client *client, mdv_table *table, mdv_objid const *row_id, mdv_rowset *rowset)
+{
+    mdv_msg_update update =
+    {
+        .table = *mdv_table_uuid(table),
+        .row_id = *row_id,
+        .rows = rowset
+    };
+
+    binn binn_msg;
+
+    if (!mdv_msg_update_binn(&update, &binn_msg))
+        return MDV_FAILED;
+
+    mdv_msg req =
+    {
+        .hdr =
+        {
+            .id = mdv_msg_update_id,
+            .size = binn_size(&binn_msg)
+        },
+        .payload = binn_ptr(&binn_msg)
+    };
+
+    mdv_msg resp;
+
+    mdv_errno err = mdv_client_send(client, &req, &resp, client->response_timeout);
+
+    binn_free(&binn_msg);
+
+    if (err == MDV_OK)
+    {
+        switch(resp.hdr.id)
+        {
+            case mdv_message_id(status):
+            {
+                if (mdv_client_status_handler(&resp, &err) == MDV_OK)
+                    break;
+            }
+
+            default:
+                err = MDV_FAILED;
+                MDV_LOGE("Unexpected response");
+                break;
+        }
+
+        mdv_free_msg(&resp);
+    }
 
     return err;
 }
@@ -816,6 +974,13 @@ static void * mdv_rowset_enumerator_impl_current(mdv_enumerator *enumerator)
 }
 
 
+static mdv_objid const * mdv_rowset_enumerator_impl_row_id(mdv_enumerator *enumerator)
+{
+    mdv_rowset_enumerator_impl *impl = (mdv_rowset_enumerator_impl *)enumerator;
+    return impl->fset_enumerator ? mdv_enumerator_row_id(impl->fset_enumerator) : 0;
+}
+
+
 static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset_impl *rowset)
 {
     mdv_rowset_enumerator_impl *enumerator =
@@ -837,7 +1002,8 @@ static mdv_enumerator * mdv_rowset_enumerator_impl_create(mdv_rowset_impl *rowse
         .release = mdv_rowset_enumerator_impl_release,
         .reset   = mdv_rowset_enumerator_impl_reset,
         .next    = mdv_rowset_enumerator_impl_next,
-        .current = mdv_rowset_enumerator_impl_current
+        .current = mdv_rowset_enumerator_impl_current,
+        .row_id  = mdv_rowset_enumerator_impl_row_id
     };
 
     enumerator->base.vptr = &vtbl;
@@ -1006,10 +1172,10 @@ static mdv_errno mdv_select_request(mdv_client *client,
 }
 
 
-mdv_rowset * mdv_select(mdv_client *client,
-                        mdv_table  *table,
-                        mdv_bitset *fields,
-                        char const *filter)
+mdv_rowset * mdv_dbclient_select(mdv_client *client,
+                               mdv_table  *table,
+                               mdv_bitset *fields,
+                               char const *filter)
 {
     mdv_table *table_slice = mdv_table_slice(table, fields);
 

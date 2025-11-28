@@ -32,6 +32,18 @@ uint32_t                  mdv_evt_rowdata_ins_req_release(mdv_evt_rowdata_ins_re
 typedef struct
 {
     mdv_event       base;
+    mdv_uuid        table_id;   ///< Table identifier
+    mdv_objid       row_id;     ///< Row identifier to delete
+} mdv_evt_rowdata_del_req;
+
+mdv_evt_rowdata_del_req * mdv_evt_rowdata_del_req_create(mdv_uuid const *table_id, mdv_objid const *row_id);
+mdv_evt_rowdata_del_req * mdv_evt_rowdata_del_req_retain(mdv_evt_rowdata_del_req *evt);
+uint32_t                  mdv_evt_rowdata_del_req_release(mdv_evt_rowdata_del_req *evt);
+
+
+typedef struct
+{
+    mdv_event       base;
     mdv_uuid        table;      ///< Table identifier (in)
     mdv_rowdata    *rowdata;    ///< Rowdata storage (out)
 } mdv_evt_rowdata;

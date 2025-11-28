@@ -367,6 +367,8 @@ mdv_cursor mdv_cursor_open(mdv_map *pmap, mdv_transaction *ptransaction)
     MDB_dbi dbi = pmap->dbmap;
     MDB_cursor *cursor;
 
+    MDV_LOGI("DEBUG: mdv_cursor_open: txn=%p, dbi=%u", txn, dbi);
+
     int rc = mdb_cursor_open(txn, dbi, &cursor);
 
     if(rc != MDB_SUCCESS)
@@ -375,6 +377,7 @@ mdv_cursor mdv_cursor_open(mdv_map *pmap, mdv_transaction *ptransaction)
         return (mdv_cursor){ 0, 0 };
     }
 
+    MDV_LOGI("DEBUG: mdv_cursor_open: cursor created successfully");
     return (mdv_cursor){ mdv_storage_retain(ptransaction->pstorage), cursor };
 }
 
@@ -385,10 +388,16 @@ mdv_cursor mdv_cursor_open_explicit(mdv_map *pmap, mdv_transaction *ptransaction
     if (!mdv_cursor_ok(cursor))
         return cursor;
 
+    // For empty databases, MDB_NOTFOUND on FIRST is expected and not an error
     if (!mdv_cursor_get(&cursor, key, value, op))
     {
-        mdv_cursor_close(&cursor);
-        return (mdv_cursor){ 0, 0 };
+        // Only close cursor if it's not MDB_NOTFOUND on FIRST (empty database)
+        if (!(op == MDV_CURSOR_FIRST))
+        {
+            mdv_cursor_close(&cursor);
+            return (mdv_cursor){ 0, 0 };
+        }
+        // For empty database, keep the cursor open for future use
     }
 
     return cursor;
@@ -426,7 +435,11 @@ bool mdv_cursor_get(mdv_cursor *pcursor, mdv_data *key, mdv_data *value, mdv_cur
                                     MDB_FIRST;
     MDB_cursor *cursor = (MDB_cursor *)pcursor->pcursor;
 
+    MDV_LOGI("DEBUG: mdv_cursor_get: op=%d, cursor=%p", op, cursor);
+
     int rc = mdb_cursor_get(cursor, (MDB_val*)key, (MDB_val*)value, cursor_op);
+
+    MDV_LOGI("DEBUG: mdv_cursor_get: result=%d (%s)", rc, mdb_strerror(rc));
 
     switch(rc)
     {

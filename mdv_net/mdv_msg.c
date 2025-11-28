@@ -32,6 +32,13 @@ mdv_errno mdv_write_msg(mdv_descriptor fd, mdv_msg const *msg)
 
 mdv_errno mdv_read_msg(mdv_descriptor fd, mdv_msg *msg)
 {
+    MDV_LOGI("DEBUG: mdv_read_msg start, fd=%d, msg=%p", fd, msg);
+    
+    if (!msg) {
+        MDV_LOGE("DEBUG: NULL message pointer");
+        return MDV_FAILED;
+    }
+    
     // Read header
     while(msg->available_size < sizeof(mdv_msghdr))
     {
@@ -49,10 +56,13 @@ mdv_errno mdv_read_msg(mdv_descriptor fd, mdv_msg *msg)
             msg->hdr.id     = mdv_ntoh16(msg->hdr.id);
             msg->hdr.number = mdv_ntoh16(msg->hdr.number);
             msg->hdr.size   = mdv_ntoh32(msg->hdr.size);
+            
+            MDV_LOGI("DEBUG: Header read - id=%u, number=%u, size=%u", 
+                     msg->hdr.id, msg->hdr.number, msg->hdr.size);
 
             if (msg->hdr.size > MDV_MSG_SIZE_MAX)
             {
-                MDV_LOGE("Incoming message is too long");
+                MDV_LOGE("Incoming message is too long: %u > %u", msg->hdr.size, MDV_MSG_SIZE_MAX);
                 memset(msg, 0, sizeof *msg);
                 return MDV_FAILED;
             }
@@ -64,10 +74,12 @@ mdv_errno mdv_read_msg(mdv_descriptor fd, mdv_msg *msg)
 
                 if (!msg->payload)
                 {
-                    MDV_LOGE("No memory for incoming message");
+                    MDV_LOGE("No memory for incoming message of size %u", msg->hdr.size);
                     memset(msg, 0, sizeof *msg);
                     return MDV_NO_MEM;
                 }
+                
+                MDV_LOGI("DEBUG: Allocated payload %p for size %u", msg->payload, msg->hdr.size);
             }
             else
                 msg->payload = 0;
@@ -81,6 +93,11 @@ mdv_errno mdv_read_msg(mdv_descriptor fd, mdv_msg *msg)
         uint32_t const available_size = msg->available_size - sizeof(mdv_msghdr);
 
         size_t len = msg->hdr.size - available_size;
+        
+        if (!msg->payload && msg->hdr.size > 0) {
+            MDV_LOGE("DEBUG: NULL payload but size > 0: %u", msg->hdr.size);
+            return MDV_FAILED;
+        }
 
         mdv_errno err = mdv_read(fd, (char*)msg->payload + available_size, &len);
 
@@ -89,6 +106,9 @@ mdv_errno mdv_read_msg(mdv_descriptor fd, mdv_msg *msg)
 
         msg->available_size += len;
     }
+    
+    MDV_LOGI("DEBUG: Message read complete - id=%u, size=%u, payload=%p", 
+             msg->hdr.id, msg->hdr.size, msg->payload);
 
     return MDV_OK;
 }

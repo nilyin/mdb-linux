@@ -347,6 +347,9 @@ mdv_errno mdv_dispatcher_read(mdv_dispatcher *pd)
 
     if (err != MDV_OK)
         return err;
+    
+    MDV_LOGI("DEBUG: Message received - id=%u, number=%u, size=%u, payload=%p", 
+             pd->message.hdr.id, pd->message.hdr.number, pd->message.hdr.size, pd->message.payload);
 
     int msg_is_handled = 0;
 
@@ -379,7 +382,12 @@ mdv_errno mdv_dispatcher_read(mdv_dispatcher *pd)
         mdv_dispatcher_handler *handler = mdv_hashmap_find(pd->handlers, &pd->message.hdr.id);
 
         if (handler)
+        {
+            MDV_LOGI("DEBUG: Calling handler for message id=%u", pd->message.hdr.id);
             err = handler->fn(&pd->message, handler->arg);
+            char err_str[64];
+            MDV_LOGI("DEBUG: Handler returned err=%d (%s)", err, mdv_strerror(err, err_str, sizeof(err_str)));
+        }
         else
         {
             MDV_LOGW("Message is discarded due to appropriate handler not found");

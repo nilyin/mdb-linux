@@ -1,0 +1,20 @@
+{
+    "name": "medveddb-test",
+    "runArgs": ["--name", "medveddb-test"],
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "workspaceFolder": "/app",
+    "forwardPorts": [22],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "vadimcn.vscode-lldb"
+            ]
+        }
+    },
+    "postCreateCommand": "chmod +x scripts/*.sh"
+}

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.10)
 project(mdv4j)
 
 use_c11()
@@ -7,11 +7,18 @@ if(BUILD_JNI)
 
     if(JNI_FOUND)
 
-        set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        # set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        # the below ensures it uses the generated file when SWIG is available, 
+        # and falls back to the source file when SWIG is not found
+        if(SWIG_FOUND)
+            set(SOURCES ${CMAKE_CURRENT_BINARY_DIR}/mdv_api4j.c)
+        else()
+            set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mdv_api4j.c)
+        endif()
 
         if(SWIG_FOUND)
             set(SWIG_OUTDIR ${CMAKE_CURRENT_BINARY_DIR})
-            set(SWIG_OUT ${SOURCES})
+            set(SWIG_OUT ${CMAKE_CURRENT_BINARY_DIR}/mdv_api4j.c)
 
             set(SWIG_FLAGS
                 -java
@@ -29,6 +36,7 @@ if(BUILD_JNI)
                 ${SWIG_OUTDIR}/mdv.java
                 ${SWIG_OUTDIR}/mdvJNI.java
                 ${SWIG_OUTDIR}/UUID.java
+                ${SWIG_OUTDIR}/ObjectId.java
                 ${SWIG_OUTDIR}/BitSet.java
                 ${SWIG_OUTDIR}/Field.java
                 ${SWIG_OUTDIR}/FieldType.java
@@ -55,6 +63,7 @@ if(BUILD_JNI)
                 ${SWIG_OUTDIR}/ClientDbConfig.java
                 ${SWIG_OUTDIR}/ClientConnectionConfig.java
                 ${SWIG_OUTDIR}/ClientThreadpoolConfig.java
+                ${SWIG_OUTDIR}/SWIGTYPE_p_unsigned_char.java
             )
 
             add_custom_target(mdv_swig4j ALL

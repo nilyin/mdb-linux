@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.5.1.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2020 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -31,11 +31,12 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-/* Undocumented macros, especially those whose name start with YY_,
-   are private implementation details.  Do not rely on them.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
 
-#ifndef YY_MDV_HOME_VLAD_DEV_MEDVEDDB_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED
-# define YY_MDV_HOME_VLAD_DEV_MEDVEDDB_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED
+#ifndef YY_MDV_APP_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED
+# define YY_MDV_APP_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED
 /* Debug traces.  */
 #ifndef MDV_DEBUG
 # if defined YYDEBUG
@@ -52,31 +53,36 @@
 extern int mdv_debug;
 #endif
 
-/* Token type.  */
+/* Token kinds.  */
 #ifndef MDV_TOKENTYPE
 # define MDV_TOKENTYPE
   enum mdv_tokentype
   {
-    NUMBER = 258,
-    PLUS = 259,
-    MINUS = 260,
-    MULT = 261,
-    DIV = 262,
-    EOL = 263,
-    LB = 264,
-    RB = 265
+    MDV_EMPTY = -2,
+    MDV_EOF = 0,                   /* "end of file"  */
+    MDV_error = 256,               /* error  */
+    MDV_UNDEF = 257,               /* "invalid token"  */
+    NUMBER = 258,                  /* NUMBER  */
+    PLUS = 259,                    /* PLUS  */
+    MINUS = 260,                   /* MINUS  */
+    MULT = 261,                    /* MULT  */
+    DIV = 262,                     /* DIV  */
+    EOL = 263,                     /* EOL  */
+    LB = 264,                      /* LB  */
+    RB = 265                       /* RB  */
   };
+  typedef enum mdv_tokentype mdv_token_kind_t;
 #endif
 
 /* Value type.  */
 #if ! defined MDV_STYPE && ! defined MDV_STYPE_IS_DECLARED
 union MDV_STYPE
 {
-#line 22 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql.y"
+#line 22 "/app/mdv_core/storage/mdv_sql.y"
 
    float val;
 
-#line 80 "/home/vlad/Dev/MedvedDB/mdv_core/storage/mdv_sql_lexer.h"
+#line 86 "/app/mdv_core/storage/mdv_sql_lexer.h"
 
 };
 typedef union MDV_STYPE MDV_STYPE;
@@ -100,6 +106,8 @@ struct MDV_LTYPE
 
 
 
+
 int mdv_parse (int *nastiness, int *randomness);
 
-#endif /* !YY_MDV_HOME_VLAD_DEV_MEDVEDDB_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED  */
+
+#endif /* !YY_MDV_APP_MDV_CORE_STORAGE_MDV_SQL_LEXER_H_INCLUDED  */

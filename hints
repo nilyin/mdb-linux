@@ -1,0 +1,193 @@
+## Run tests
+
+# 1. terninal 1
+- cleand db with script:
+```
+./clean_db.sh 
+```
+
+- run db server (with gdb if needed):
+```
+gdb --args ./build/mdv_service/medved --cfg=assets/conf/medved.conf
+```
+
+alternative commands:
+```
+cd build && ./mdv_service/medved --cfg=../assets/conf/medved.c nf & sleep 3 ./mdv_tests/mdv_perf 2>&1 | head -50
+
+./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 & SERVER_PID=$!
+kill $SERVER_PID
+
+# Check if empty rows are still being created
+grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" server.log
+
+```
+
+
+# terminal 2
+- rebuilt project with debug info:
+```
+cd build
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+cmake --build .
+```
+
+- run test (with gdb if needed):
+```
+gdb ./mdv_tests/mdv_perf
+
+#or
+./mdv_tests/mdv_tests --gtest_filter="*perf*"
+```
+
+# one commander:
+```
+bash -c "./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 & SERVER_PID=\$! && sleep 3 && ./mdv_tests/mdv_perf 2>&1 | head -50 && kill \$SERVER_PID"
+
+```
+
+# add to devcontainer net-tools:
+```
+sudo apt update
+sudo apt install net-tools
+```
+
+# when use:
+netstat -tulpn
+
+# run DB server from root directory
+bash -c "cd build && ./mdv_service/medved --cfg=../assets/conf/medved.conf"
+
+or with tests:
+
+bash -c "cd build && ./mdv_service/medved --cfg=../assets/conf/medved.conf & sleep 5 && ./mdv_tests/mdv_tests"
+
+# run java build and tests
+
+ #TLDR
+ a) compile test in java-test/
+ b) java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+
+# Commands to run (from build directory, e.g. /app/build)
+
+1. Compile the test into .class files
+mkdir -p java-tests
+javac -cp mdv_bindings/mdv/java/mdv4j.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
+This produces bytecode files such as mdv_bindings/mdv/java/tests/CrudTest.java → java-tests/CrudTest.class
+
+Explanation:
+-Djava.library.path=mdv_bindings/mdv/java: This is a system property setting. The -D option allows you to define system properties for the Java application. In this case, java.library.path is set to mdv_bindings/mdv/java, which tells the JVM where to find native libraries (like .dll, .so, or .dylib files) that the application might need.
+-cp mdv_bindings/mdv/java/mdv4j.jar:java-tests.jar: The -cp (cp is -classpath) option specifies the classpath, which is a list of locations where the JVM should look for class files and libraries. The classpath can include directories and JAR files. In this case, it includes two paths:
+* mdv_bindings/mdv/java/mdv4j.jar: A JAR file that contains compiled Java classes.
+* java-tests.jar: Another JAR file (or could be a directory) that contains additional classes.
+* The colon (:) is the separator used in Unix-like operating systems (such as Linux and macOS) to separate multiple entries in the classpath. On Windows, the separator would be a semicolon (;
+
+
+2. Run the compiled class directly (recommended)
+java -Djava.library.path=mdv_bindings/mdv/java -cp java-tests:mdv_bindings/mdv/java/mdv4j.jar CrudTest
+
+where:
+
+-Djava.library.path points to the directory containing the native JNI library (e.g., libmdv4j.so)
+-cp includes the compiled classes directory and the SWIG-generated binding JAR
+
+2.1 alternative: Package compiled classes into a jar and run with classpath (alternative)
+jar cf java-tests.jar -C java-tests .
+java -Djava.library.path=mdv_bindings/mdv/java -cp mdv_bindings/mdv/java/mdv4j.jar:java-tests.jar CrudTest
+Create an executable JAR (manifest) — if you prefer a single jar
+printf "Main-Class: CrudTest\nClass-Path: mdv4j.jar\n" > manifest.mf
+jar cfm CrudTest.jar manifest.mf -C java-tests .
+Ensure mdv4j.jar is alongside CrudTest.jar (or update Class-Path to point to the correct path).
+Run:
+java -Djava.library.path=mdv_bindings/mdv/java -jar CrudTest.jar
+
+3. Quick diagnostics (if things fail)
+
+Confirm JAR contents (do the mdv classes exist inside the SWIG jar?):
+jar tf mdv_bindings/mdv/java/mdv4j.jar | grep '^mdv/' | sed -n '1,200p'
+If javac says "package mdv does not exist":
+Use the exact jar filename in -cp (maybe mdv4j-1.0.0.jar instead of mdv4j.jar).
+
+Example:
+javac -cp mdv_bindings/mdv/java/mdv4j-1.0.0.jar ../mdv_bindings/mdv/java/tests/CrudTest.java -d java-tests
+If JVM throws UnsatisfiedLinkError: no mdv4j in java.library.path:
+Confirm libmdv4j.so exists: ls -l mdv_bindings/mdv/java
+Ensure JVM arch matches the native lib (java -version and uname -m)
+
+
+# using GDB
+
+To run C program with GDB and output debug logs to the console, you can use the command below. Let's break down what each part of the command does and how it works.
+
+
+
+gdb -batch -ex "run" -ex "bt" -ex "quit" --args ./mdv_tests/mdv_tests 2>&1 | grep -A 20 -B 5 "CRUD\|Segmentation\|segfault\|core\|assert"
+gdb: This is the command to start the GNU Debugger.
+
+
+-batch: This option tells GDB to run in batch mode. In this mode, GDB will execute the commands specified with -ex and then exit automatically without entering the interactive mode. This is useful for scripting and automation.
+
+
+-ex "run": This tells GDB to execute the run command, which starts your program.
+
+
+-ex "bt": After the program finishes (either normally or due to a crash), this command tells GDB to execute the bt (backtrace) command, which provides a stack trace of function calls leading up to the point where the program crashed or exited.
+
+
+-ex "quit": This command tells GDB to exit after executing the previous commands.
+
+
+--args ./mdv_tests/mdv_tests: This specifies the program you want to debug (in this case, ./mdv_tests/mdv_tests). The --args option allows you to pass arguments to the program, if needed. In this case, it is just the path to the executable.
+
+
+2>&1: This part redirects the standard error (file descriptor 2) to standard output (file descriptor 1). This means that both the output from the program and any error messages will be sent to the same output stream.
+
+
+|: This pipe symbol takes the output of the command on the left and uses it as the input for the command on the right.
+
+
+grep -A 20 -B 5 "CRUD\|Segmentation\|segfault\|core\|assert": This command filters the output from GDB. The grep command looks for lines that match any of the specified patterns (CRUD, Segmentation, segfault, core, or assert). 
+
+
+-A 20 tells grep to include 20 lines of output after each matching line.
+-B 5 tells grep to include 5 lines of output before each matching line.
+
+Summary of What This Command Does
+It runs your C program under GDB in a non-interactive mode.
+If the program crashes, it captures the backtrace.
+It redirects all output (including errors) to the console.
+It filters the output to show only relevant logs that match the specified patterns, along with some context lines before and after each match.
+Example Usage
+You would run this command in your terminal where your executable is located, and it will output the relevant logs based on the criteria you specified. This is particularly helpful for debugging issues such as segmentation faults or assertions in your code.
+
+# debug with log file
+
+```bash
+cd /app/build
+make mdv_tests medved -j4
+
+# Clean database and run test
+rm -rf ./data && mkdir -p ./data
+./mdv_service/medved --cfg=../assets/conf/medved.conf > server.log 2>&1 &
+SERVER_PID=$!
+
+sleep 2
+./mdv_tests/mdv_tests --gtest_filter="*perf*"
+kill $SERVER_PID
+
+# Check if empty rows are still being created
+grep -A 2 -B 2 "CRITICAL.*empty\|serialized.*0.*fields\|No fields serialized" server.log
+
+
+```
+
+
+other usefull commmands:
+
+```
+find . -name "*.c" | xargs grep -l "case.*mdv_msg.*id|switch.*msg.*id|INSERT INTO.*case" | head -3
+./mdv_core/mdv_tracker.c
+
+
+grep -n -A20 -B5 "case.*9|mdv_msg_insert_into_id" /app/mdv_core/mdv_tracker.c
+```
